@@ -1,0 +1,19 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    }
+  ],
+  "firestore": {
+    "rules": "firestore/firestore.rules"
+  },
+  "hosting": {
+    "public": "web/bikelanebumps-site",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}

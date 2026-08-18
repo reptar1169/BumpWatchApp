@@ -1,0 +1,454 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0AD0C4E018A4AD970FC3880B /* BumpEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88EF0B63EF547BD09F32DFCE /* BumpEvent.swift */; };
+		2650A0E98CDCBC0EB42D0E4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2333AF6CBF12049E704888CE /* Assets.xcassets */; };
+		3B0B0D4B83550C041A354BA6 /* RideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D13D00E4E8B54585A22A9B4 /* RideStore.swift */; };
+		4FFCAAA7B4B78D7B8230A09C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6FBE8138A08A03734DA7EEC /* ContentView.swift */; };
+		507FE549326AA0B31801826C /* BumpWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF26FDCA2C965247DC80045 /* BumpWatchApp.swift */; };
+		51219C88D28CAF41966866F1 /* BumpSeverity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0561231DE98238160E2D2E6E /* BumpSeverity.swift */; };
+		83ECDA44D830681D2AC88A6A /* BumpWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 08EC1541EFE2AF32F93D51CB /* BumpWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8614F5796D9294CFE671C2AE /* LocationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE830EFA7269E57AB07F91AF /* LocationTracker.swift */; };
+		9A834305AB4AB0001299A1BA /* UploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A41B3883EF1606A165BB54 /* UploadService.swift */; };
+		AE3BE92320177359C6DA7912 /* RideManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0457BC438BFDC7EEF63AA48 /* RideManager.swift */; };
+		CB496476CF4FC8827302D7D5 /* BumpDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA5953F69393854F3599BCB /* BumpDetector.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		25E33152E0BABE40D1200AB5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AC1791F638C149B25CE05734 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D6052A0FE0F65E39C0D22153;
+			remoteInfo = "BumpWatch Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		17C680FDEDE7E11A993E34DB /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				83ECDA44D830681D2AC88A6A /* BumpWatch Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0561231DE98238160E2D2E6E /* BumpSeverity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpSeverity.swift; sourceTree = "<group>"; };
+		08EC1541EFE2AF32F93D51CB /* BumpWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "BumpWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10C17BEDD084E90DFE66E255 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2333AF6CBF12049E704888CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		53A41B3883EF1606A165BB54 /* UploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadService.swift; sourceTree = "<group>"; };
+		88EF0B63EF547BD09F32DFCE /* BumpEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpEvent.swift; sourceTree = "<group>"; };
+		8D13D00E4E8B54585A22A9B4 /* RideStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideStore.swift; sourceTree = "<group>"; };
+		9C1B61A8D02D7135BC3CFD21 /* BumpWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BumpWatch.entitlements; sourceTree = "<group>"; };
+		CAA5953F69393854F3599BCB /* BumpDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpDetector.swift; sourceTree = "<group>"; };
+		CE830EFA7269E57AB07F91AF /* LocationTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTracker.swift; sourceTree = "<group>"; };
+		D0457BC438BFDC7EEF63AA48 /* RideManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideManager.swift; sourceTree = "<group>"; };
+		DAF26FDCA2C965247DC80045 /* BumpWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpWatchApp.swift; sourceTree = "<group>"; };
+		DDA5AD46BA95BA99C2D87D7C /* BumpWatch.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BumpWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6FBE8138A08A03734DA7EEC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		681DC909004A0FB904D60696 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				08EC1541EFE2AF32F93D51CB /* BumpWatch Watch App.app */,
+				DDA5AD46BA95BA99C2D87D7C /* BumpWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		97C062F31A1F57686043129A /* BumpWatch Watch App */ = {
+			isa = PBXGroup;
+			children = (
+				2333AF6CBF12049E704888CE /* Assets.xcassets */,
+				CAA5953F69393854F3599BCB /* BumpDetector.swift */,
+				88EF0B63EF547BD09F32DFCE /* BumpEvent.swift */,
+				0561231DE98238160E2D2E6E /* BumpSeverity.swift */,
+				9C1B61A8D02D7135BC3CFD21 /* BumpWatch.entitlements */,
+				DAF26FDCA2C965247DC80045 /* BumpWatchApp.swift */,
+				F6FBE8138A08A03734DA7EEC /* ContentView.swift */,
+				10C17BEDD084E90DFE66E255 /* Info.plist */,
+				CE830EFA7269E57AB07F91AF /* LocationTracker.swift */,
+				D0457BC438BFDC7EEF63AA48 /* RideManager.swift */,
+				8D13D00E4E8B54585A22A9B4 /* RideStore.swift */,
+				53A41B3883EF1606A165BB54 /* UploadService.swift */,
+			);
+			path = "BumpWatch Watch App";
+			sourceTree = "<group>";
+		};
+		B6D6E249BBAC485B9A6F9331 = {
+			isa = PBXGroup;
+			children = (
+				97C062F31A1F57686043129A /* BumpWatch Watch App */,
+				681DC909004A0FB904D60696 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B18843C5437213BE7E17ECD3 /* BumpWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 82E892DB0AA5B2F31FDC7400 /* Build configuration list for PBXNativeTarget "BumpWatch" */;
+			buildPhases = (
+				5DCA4D5DF376F63101749F19 /* Sources */,
+				17C680FDEDE7E11A993E34DB /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A3D564C5FC0E024AD7357441 /* PBXTargetDependency */,
+			);
+			name = BumpWatch;
+			packageProductDependencies = (
+			);
+			productName = BumpWatch;
+			productReference = DDA5AD46BA95BA99C2D87D7C /* BumpWatch.app */;
+			productType = "com.apple.product-type.application.watchapp2-container";
+		};
+		D6052A0FE0F65E39C0D22153 /* BumpWatch Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 372595DF554949C6A01105B5 /* Build configuration list for PBXNativeTarget "BumpWatch Watch App" */;
+			buildPhases = (
+				7A1E7E3CC32D93DDAAA97000 /* Sources */,
+				F9BABF6D2134D274357BB0B8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "BumpWatch Watch App";
+			packageProductDependencies = (
+			);
+			productName = "BumpWatch Watch App";
+			productReference = 08EC1541EFE2AF32F93D51CB /* BumpWatch Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AC1791F638C149B25CE05734 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B18843C5437213BE7E17ECD3 = {
+						DevelopmentTeam = F54YTSCT8G;
+						ProvisioningStyle = Automatic;
+					};
+					D6052A0FE0F65E39C0D22153 = {
+						DevelopmentTeam = F54YTSCT8G;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = EC262192CCCDE40354509B0C /* Build configuration list for PBXProject "BumpWatch" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B6D6E249BBAC485B9A6F9331;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 681DC909004A0FB904D60696 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B18843C5437213BE7E17ECD3 /* BumpWatch */,
+				D6052A0FE0F65E39C0D22153 /* BumpWatch Watch App */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F9BABF6D2134D274357BB0B8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2650A0E98CDCBC0EB42D0E4F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5DCA4D5DF376F63101749F19 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A1E7E3CC32D93DDAAA97000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB496476CF4FC8827302D7D5 /* BumpDetector.swift in Sources */,
+				0AD0C4E018A4AD970FC3880B /* BumpEvent.swift in Sources */,
+				51219C88D28CAF41966866F1 /* BumpSeverity.swift in Sources */,
+				507FE549326AA0B31801826C /* BumpWatchApp.swift in Sources */,
+				4FFCAAA7B4B78D7B8230A09C /* ContentView.swift in Sources */,
+				8614F5796D9294CFE671C2AE /* LocationTracker.swift in Sources */,
+				AE3BE92320177359C6DA7912 /* RideManager.swift in Sources */,
+				3B0B0D4B83550C041A354BA6 /* RideStore.swift in Sources */,
+				9A834305AB4AB0001299A1BA /* UploadService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A3D564C5FC0E024AD7357441 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D6052A0FE0F65E39C0D22153 /* BumpWatch Watch App */;
+			targetProxy = 25E33152E0BABE40D1200AB5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0501BED44405CE9C4B5712A2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F54YTSCT8G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BumpWatch;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffschoello.bumpwatch;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		2DA1236F114A23F3213CD6FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		344A4A319E589BD1B68F1E79 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F54YTSCT8G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = BumpWatch;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffschoello.bumpwatch;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6AD15BED56FCA7A0E35C68FF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		BF227CD0EE9FA455906CC5F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "BumpWatch Watch App/BumpWatch.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F54YTSCT8G;
+				INFOPLIST_FILE = "BumpWatch Watch App/Info.plist";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffschoello.bumpwatch.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		D1C1E42CDFB56BBA633311B3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "BumpWatch Watch App/BumpWatch.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F54YTSCT8G;
+				INFOPLIST_FILE = "BumpWatch Watch App/Info.plist";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeffschoello.bumpwatch.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		372595DF554949C6A01105B5 /* Build configuration list for PBXNativeTarget "BumpWatch Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BF227CD0EE9FA455906CC5F7 /* Debug */,
+				D1C1E42CDFB56BBA633311B3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		82E892DB0AA5B2F31FDC7400 /* Build configuration list for PBXNativeTarget "BumpWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				344A4A319E589BD1B68F1E79 /* Debug */,
+				0501BED44405CE9C4B5712A2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EC262192CCCDE40354509B0C /* Build configuration list for PBXProject "BumpWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DA1236F114A23F3213CD6FC /* Debug */,
+				6AD15BED56FCA7A0E35C68FF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AC1791F638C149B25CE05734 /* Project object */;
+}

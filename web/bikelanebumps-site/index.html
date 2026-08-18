@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>bikelanebumps — Mapping Busted Bike Lanes</title>
+<meta name="description" content="A live heatmap of bike lane bumps, potholes, and cracks, built from real ride data recorded on an Apple Watch." />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="alternate icon" href="favicon.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gradRoad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffc23d"/>
+      <stop offset="100%" stop-color="#ff4d3d"/>
+    </linearGradient>
+    <symbol id="mark-brand" viewBox="0 0 100 100">
+      <circle cx="50" cy="38" r="22" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="50" cy="38" r="3" fill="currentColor"/>
+      <path d="M10,74 L34,74 Q50,54 66,74 L90,74" fill="none" stroke="url(#gradRoad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="index.html">
+      <svg class="brand-icon" viewBox="0 0 100 100" aria-hidden="true"><use href="#mark-brand"/></svg>
+      <span class="brand-word">bikelanebumps<span class="brand-dot">.org</span></span>
+    </a>
+
+    <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="siteNav" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+
+    <nav class="site-nav" id="siteNav">
+      <a href="index.html" class="active">Home</a>
+      <a href="about.html">About</a>
+      <a class="nav-cta" href="#get-app">Get the app</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <p class="eyebrow">Community-sourced road data</p>
+      <h1>Mapping <span class="hl">busted</span> bike lanes.</h1>
+      <p class="hero-sub">
+        Every crack, pothole, and expansion joint that rattles you off your line adds up.
+        BikeLaneBumps turns real rides — recorded straight off an Apple Watch — into a live
+        heatmap, so the streets that actually need fixing stop being a guessing game.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#map-section">See the heatmap</a>
+        <a class="btn btn-ghost" href="#get-app">Get the app</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" id="stats" aria-label="Live stats">
+    <div class="wrap stats-grid">
+      <div class="stat-tile">
+        <p class="stat-value" id="statBumps">—</p>
+        <p class="stat-label">Bumps recorded</p>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-value" id="statRides">—</p>
+        <p class="stat-label">Rides logged</p>
+      </div>
+      <div class="stat-tile">
+        <p class="stat-value" id="statWorst">—</p>
+        <p class="stat-label">Worst bump on record</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="map-section" id="map-section">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>The heatmap</h2>
+        <p class="section-sub">Warmer colors mean more bumps, and worse ones. Zoom in on your commute.</p>
+      </div>
+
+      <div class="map-frame">
+        <div id="map" role="img" aria-label="Heatmap of recorded bike lane bumps"></div>
+        <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtn" aria-label="View full screen" hidden>
+          <svg class="fs-icon fs-icon-expand" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg class="fs-icon fs-icon-collapse" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <p class="map-empty" id="mapEmpty" hidden>
+          No bumps recorded yet — be the first to ride and put your street on the map.
+        </p>
+        <div class="map-legend">
+          <span>Low</span>
+          <span class="legend-bar" aria-hidden="true"></span>
+          <span>Severe</span>
+        </div>
+      </div>
+      <p class="map-refresh"><a href="https://www.bikelanebumps.org">Data not loading? Refresh the page.</a></p>
+    </div>
+  </section>
+
+  <section class="how" id="how-it-works">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>How it works</h2>
+      </div>
+      <ol class="how-grid">
+        <li class="how-card">
+          <span class="how-index">01</span>
+          <h3>Ride with the app running</h3>
+          <p>The BumpWatch app tracks your ride's GPS location and reads your Watch's accelerometer the whole time — no phone required.</p>
+        </li>
+        <li class="how-card">
+          <span class="how-index">02</span>
+          <h3>Bumps get flagged automatically</h3>
+          <p>A sharp jolt above a set threshold gets logged with its exact location, its severity, and the time it happened.</p>
+        </li>
+        <li class="how-card">
+          <span class="how-index">03</span>
+          <h3>It lands on the map, for everyone</h3>
+          <p>When you finish your ride, your data uploads straight to this page's heatmap — anonymous, aggregated, and public.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="get-app" id="get-app">
+    <div class="wrap get-app-inner">
+      <div class="section-head">
+        <h2>Get the app</h2>
+        <p class="section-sub">
+          BumpWatch is a standalone Apple Watch app — it doesn't need your phone nearby once
+          you're riding. It's not on the App Store right now (the older iPhone version of this
+          project was pulled after going stale), so for the moment it installs the developer
+          way: straight from Xcode onto a paired Watch.
+        </p>
+      </div>
+      <div class="get-app-card">
+        <ol>
+          <li>Clone or download the BumpWatch project.</li>
+          <li>Open it in Xcode, select your Watch as the run destination.</li>
+          <li>Build &amp; run — approve the location, motion, and Health permissions on first launch.</li>
+          <li>Tap Start before you ride, Stop when you're done. That's it.</li>
+        </ol>
+        <a class="btn btn-primary" href="mailto:schoellojeff@gmail.com?subject=BumpWatch%20app%20request">Want a copy? Contact us</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <a class="brand" href="index.html">
+      <svg class="brand-icon" viewBox="0 0 100 100" aria-hidden="true"><use href="#mark-brand"/></svg>
+      <span class="brand-word">bikelanebumps<span class="brand-dot">.org</span></span>
+    </a>
+    <nav class="footer-nav">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="privacy-policy.html">Privacy Policy</a>
+      <a href="terms-of-use.html">Terms of Use</a>
+    </nav>
+    <p class="footer-copy">&copy; <span id="year"></span> bikelanebumps.org — built by one rider, mapped by everyone.</p>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
