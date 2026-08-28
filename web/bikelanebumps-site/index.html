@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>bikelanebumps — Mapping Busted Bike Lanes</title>
 <meta name="description" content="A live heatmap of bike lane bumps, potholes, and cracks, built from real ride data recorded on an Apple Watch." />
+
+<!-- Social share preview (Open Graph + Twitter Card) -->
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://www.bikelanebumps.org/" />
+<meta property="og:title" content="bikelanebumps — Mapping Busted Bike Lanes" />
+<meta property="og:description" content="A live heatmap of bike lane bumps, potholes, and cracks, built from real ride data recorded on an Apple Watch." />
+<meta property="og:image" content="https://www.bikelanebumps.org/social-preview.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="bikelanebumps — Mapping Busted Bike Lanes" />
+<meta name="twitter:description" content="A live heatmap of bike lane bumps, potholes, and cracks, built from real ride data recorded on an Apple Watch." />
+<meta name="twitter:image" content="https://www.bikelanebumps.org/social-preview.png" />
+
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="alternate icon" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -62,6 +76,34 @@
       <div class="hero-actions">
         <a class="btn btn-primary" href="#map-section">See the heatmap</a>
         <a class="btn btn-ghost" href="#get-app">Get the app</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="screens" aria-label="App screenshots">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>See it on your wrist</h2>
+        <p class="section-sub">
+          Tap Start before you clip in, then forget about it — BumpWatch tracks GPS, bumps, and
+          your heart rate for the whole ride, no phone required.
+        </p>
+      </div>
+      <div class="screens-grid">
+        <figure class="screen-card">
+          <img
+            src="screenshot-start.png"
+            alt="BumpWatch on Apple Watch showing the start screen, with a green Start button and the prompt “Tap to start recording your ride.”"
+            width="416" height="496" loading="lazy" />
+          <figcaption>Tap Start before you ride.</figcaption>
+        </figure>
+        <figure class="screen-card">
+          <img
+            src="screenshot-recording.png"
+            alt="BumpWatch on Apple Watch mid-ride, showing elapsed time, bump count, and live heart rate, with Pause and Finish buttons."
+            width="416" height="496" loading="lazy" />
+          <figcaption>Live time, bump count, and heart rate while you ride.</figcaption>
+        </figure>
       </div>
     </div>
   </section>
@@ -144,19 +186,14 @@
         <h2>Get the app</h2>
         <p class="section-sub">
           BumpWatch is a standalone Apple Watch app — it doesn't need your phone nearby once
-          you're riding. It's not on the App Store right now (the older iPhone version of this
-          project was pulled after going stale), so for the moment it installs the developer
-          way: straight from Xcode onto a paired Watch.
+          you're riding. It's live on the App Store now. Since it's watch-only, you won't find
+          it by searching the regular App Store app on your iPhone — open the Watch app on your
+          iPhone instead, go to its App Store tab, and search "BumpWatch" (or just tap the
+          button below from your iPhone).
         </p>
       </div>
       <div class="get-app-card">
-        <ol>
-          <li>Clone or download the BumpWatch project.</li>
-          <li>Open it in Xcode, select your Watch as the run destination.</li>
-          <li>Build &amp; run — approve the location, motion, and Health permissions on first launch.</li>
-          <li>Tap Start before you ride, Stop when you're done. That's it.</li>
-        </ol>
-        <a class="btn btn-primary" href="mailto:schoellojeff@gmail.com?subject=BumpWatch%20app%20request">Want a copy? Contact us</a>
+        <a class="btn btn-primary" href="https://apps.apple.com/app/bumpwatch/id6802094271">Get BumpWatch on the App Store</a>
       </div>
     </div>
   </section>

@@ -442,6 +442,45 @@ h1, h2, h3 {
 .map-refresh a:hover { color: var(--text-secondary); }
 
 /* ==========================================================================
+   Screenshots
+   ========================================================================== */
+
+.screens { padding: 0 0 96px; }
+
+.screens-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 140px));
+  justify-content: center;
+  gap: 16px;
+}
+
+.screen-card {
+  margin: 0;
+  text-align: center;
+}
+
+.screen-card img {
+  width: 100%;
+  /* The <img> tags carry width/height attributes (416x496, the real
+     screenshot pixels) so the browser can reserve layout space before the
+     image loads -- but those attributes also act as a presentational
+     height hint that beats an unset `height`, pinning it to 496px
+     regardless of how narrow `width: 100%` makes the box. Explicit
+     `height: auto` overrides that hint so height scales proportionally
+     with the rendered width instead of stretching. */
+  height: auto;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.screen-card figcaption {
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+/* ==========================================================================
    How it works
    ========================================================================== */
 

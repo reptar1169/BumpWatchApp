@@ -24,6 +24,13 @@ struct BumpEvent: Codable, Identifiable {
     /// Speed at the time of the bump, in meters/second, if available from
     /// CoreLocation (-1 if unknown).
     var speedMetersPerSecond: Double
+
+    /// Rider's heart rate (bpm) at the moment this bump was detected, taken
+    /// from the workout session's most recent HealthKit sample. Nil if no
+    /// heart rate reading had arrived yet (e.g. the sensor is still
+    /// acquiring a signal at the very start of a ride) or the Watch model
+    /// has no heart rate sensor.
+    var heartRateBPM: Double?
 }
 
 /// A full ride: metadata plus every bump detected during it.
@@ -36,4 +43,11 @@ struct RideRecord: Codable, Identifiable {
     /// Set to true once the ride has been successfully uploaded, so we know
     /// it's safe to delete the local copy (or at least stop retrying).
     var uploaded: Bool = false
+
+    /// Average and peak heart rate (bpm) over the whole ride, computed by
+    /// HealthKit from the workout session's collected samples (see
+    /// RideManager.updateHeartRate(from:)). Nil if no heart rate data was
+    /// ever collected for this ride.
+    var averageHeartRateBPM: Double?
+    var maxHeartRateBPM: Double?
 }

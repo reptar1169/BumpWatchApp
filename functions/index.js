@@ -59,6 +59,10 @@ exports.submitRide = onRequest(
           startTime,
           endTime,
           bumpCount: ride.bumps.length,
+          averageHeartRateBPM:
+            typeof ride.averageHeartRateBPM === "number" ? ride.averageHeartRateBPM : null,
+          maxHeartRateBPM:
+            typeof ride.maxHeartRateBPM === "number" ? ride.maxHeartRateBPM : null,
           receivedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -94,6 +98,7 @@ exports.submitRide = onRequest(
             longitude: bump.longitude,
             horizontalAccuracyMeters: bump.horizontalAccuracyMeters ?? null,
             speedMetersPerSecond: bump.speedMetersPerSecond ?? null,
+            heartRateBPM: typeof bump.heartRateBPM === "number" ? bump.heartRateBPM : null,
           });
         }
         await batch.commit();

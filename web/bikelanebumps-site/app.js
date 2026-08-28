@@ -116,11 +116,17 @@ function centerOnVisitor() {
 
 centerOnVisitor();
 
-// Dark basemap (CARTO's free "Dark Matter" tiles) to match the page.
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+// Dark basemap (CARTO's "Dark Matter" tiles) to match the page. CARTO
+// retired free anonymous basemap access in 2026 -- this now requires a free
+// API key (see https://carto.com/basemaps/apikey/), passed as the `key`
+// query param via Leaflet's {key} template substitution. The new tile
+// service also dropped the old {s}.basemaps.cartocdn.com subdomain
+// round-robin and {r} retina placeholder in favor of a single
+// basemaps.cartocdn.com host under /rastertiles/<style>/.
+L.tileLayer("https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key={key}", {
   attribution:
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: "abcd",
+  key: "cb1_2h86_1_255da47eac864d8940b5667c",
   maxZoom: 20,
 }).addTo(map);
 
@@ -135,6 +141,7 @@ const HEAT_GRADIENT = {
 
 let heatLayer = null;
 let markersLayer = null;
+let cityDotsLayer = null;
 
 // The color ceiling used to be a hand-picked constant, which meant
 // re-guessing it by hand every time BumpDetector.thresholdG changed on the
@@ -188,26 +195,40 @@ function intensityToColor(intensity) {
 }
 
 // ---------------------------------------------------------------------------
-// Heatmap <-> markers switch
+// City dots <-> heatmap <-> markers switch
 // ---------------------------------------------------------------------------
-// The heat layer is great for a zoomed-out overview but stops being
-// legible once you're close enough to tell individual streets apart --
-// that's when clickable, magnitude-scaled markers are more useful. Both
-// layers are built once when the data loads; this just toggles which one
-// is attached to the map based on current zoom.
+// Three ways of showing the same data, depending on how zoomed in you are:
+//  - Zoomed out to roughly the whole country: leaflet.heat's blur/radius are
+//    in screen pixels, so at this scale every city's whole cluster of bumps
+//    collapses into just a couple of pixels -- the heat essentially
+//    disappears. City-level dots (one per rough metro area) stay visible
+//    no matter how far out you zoom.
+//  - Zoomed to a city/region: the heat layer is the good overview.
+//  - Zoomed in far enough to tell streets apart: clickable, magnitude-scaled
+//    markers are more useful than either.
+// All three layers are built once when the data loads; this just toggles
+// which one is attached to the map based on current zoom.
 
+const SWITCH_TO_CITY_DOTS_ZOOM = 7;
 const SWITCH_TO_MARKERS_ZOOM = 15;
 
 function updateLayerForZoom() {
-  if (!heatLayer && !markersLayer) return; // data hasn't loaded yet
-  const zoomedIn = map.getZoom() >= SWITCH_TO_MARKERS_ZOOM;
+  if (!heatLayer && !markersLayer && !cityDotsLayer) return; // data hasn't loaded yet
+  const zoom = map.getZoom();
 
-  if (zoomedIn) {
-    if (heatLayer && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
-    if (markersLayer && !map.hasLayer(markersLayer)) markersLayer.addTo(map);
-  } else {
-    if (markersLayer && map.hasLayer(markersLayer)) map.removeLayer(markersLayer);
-    if (heatLayer && !map.hasLayer(heatLayer)) heatLayer.addTo(map);
+  const wantedLayer =
+    zoom >= SWITCH_TO_MARKERS_ZOOM
+      ? markersLayer
+      : zoom < SWITCH_TO_CITY_DOTS_ZOOM
+      ? cityDotsLayer
+      : heatLayer;
+
+  for (const layer of [heatLayer, markersLayer, cityDotsLayer]) {
+    if (!layer) continue;
+    const shouldShow = layer === wantedLayer;
+    const isShown = map.hasLayer(layer);
+    if (shouldShow && !isShown) layer.addTo(map);
+    if (!shouldShow && isShown) map.removeLayer(layer);
   }
 }
 
@@ -249,6 +270,65 @@ function buildBumpPopupHtml(bump, magnitudeColor) {
       ${rows.map((row) => `<p class="bump-popup-row">${row}</p>`).join("")}
     </div>
   `;
+}
+
+// Rough metro-area grouping for the zoomed-out "city dots" view -- this
+// isn't real geocoding, just a coordinate grid coarse enough (~0.2 degrees,
+// on the order of a metro area) to merge one city's worth of rides into a
+// single dot without merging two separate nearby cities together.
+const CITY_CLUSTER_GRID_DEGREES = 0.2;
+
+function buildCityClusters(bumps) {
+  const clusters = new Map();
+
+  for (const bump of bumps) {
+    const key =
+      Math.round(bump.lat / CITY_CLUSTER_GRID_DEGREES) +
+      ":" +
+      Math.round(bump.lng / CITY_CLUSTER_GRID_DEGREES);
+
+    let cluster = clusters.get(key);
+    if (!cluster) {
+      cluster = { latSum: 0, lngSum: 0, magnitudeSum: 0, count: 0 };
+      clusters.set(key, cluster);
+    }
+    cluster.latSum += bump.lat;
+    cluster.lngSum += bump.lng;
+    cluster.magnitudeSum += bump.magnitude;
+    cluster.count += 1;
+  }
+
+  return [...clusters.values()].map((cluster) => ({
+    lat: cluster.latSum / cluster.count,
+    lng: cluster.lngSum / cluster.count,
+    avgMagnitude: cluster.magnitudeSum / cluster.count,
+    count: cluster.count,
+  }));
+}
+
+function buildCityDotMarker(cluster, ceiling) {
+  const intensity = magnitudeToIntensity(cluster.avgMagnitude, ceiling);
+  const color = intensityToColor(intensity);
+  // Radius scales with how many bumps this city has, log-scaled so one
+  // heavily-ridden city doesn't dwarf every other dot on the country view.
+  const radius = 6 + Math.min(14, Math.log2(cluster.count + 1) * 3);
+
+  const marker = L.circleMarker([cluster.lat, cluster.lng], {
+    radius,
+    weight: 1.5,
+    color: "rgba(20, 19, 17, 0.55)",
+    fillColor: color,
+    fillOpacity: 0.85,
+  });
+
+  marker.bindPopup(`
+    <div class="bump-popup">
+      <p class="bump-popup-mag" style="color: ${color}">${formatCount(cluster.count)} bumps</p>
+      <p class="bump-popup-row">Avg severity: ${cluster.avgMagnitude.toFixed(2)}g</p>
+    </div>
+  `);
+
+  return marker;
 }
 
 // ---------------------------------------------------------------------------
@@ -322,6 +402,9 @@ function renderHeatmap(bumpsSnap) {
   });
 
   markersLayer = L.layerGroup(bumps.map((b) => buildBumpMarker(b, ceiling)));
+
+  const cityClusters = buildCityClusters(bumps);
+  cityDotsLayer = L.layerGroup(cityClusters.map((cluster) => buildCityDotMarker(cluster, ceiling)));
 
   // Attach whichever layer matches the current zoom -- most likely the
   // heat layer at this point, but respect wherever the map actually is

@@ -15,7 +15,13 @@ exactly which stretches of bike lane need maintenance.
 2. Every accelerometer sample is fed through a simple peak detector
    (`BumpDetector.swift`). When the acceleration magnitude (gravity removed)
    spikes above a threshold and then falls back down, that's counted as one
-   bump, tagged with the most recent GPS fix and timestamp.
+   bump, tagged with the most recent GPS fix, timestamp, and heart rate
+   reading. Heart rate itself comes from the HealthKit workout session
+   already running for background execution (see above) -- no extra sensor
+   setup needed; `RideManager` reads it via `HKLiveWorkoutBuilder`'s live
+   statistics and shows the current reading on the watch face while
+   recording, and the ride's average/max heart rate are saved with the ride
+   when it finishes.
 3. Bumps are held in memory and periodically flushed to a JSON file on the
    Watch (`RideStore.swift`), so nothing is lost if the app is killed
    mid-ride.
@@ -124,6 +130,8 @@ rides/{rideId}
   startTime: Timestamp
   endTime: Timestamp
   bumpCount: number
+  averageHeartRateBPM: number | null
+  maxHeartRateBPM: number | null
   receivedAt: Timestamp        (server write time)
 
 rides/{rideId}/bumps/{bumpId}
@@ -134,6 +142,7 @@ rides/{rideId}/bumps/{bumpId}
   longitude: number
   horizontalAccuracyMeters: number | null
   speedMetersPerSecond: number | null
+  heartRateBPM: number | null  (most recent HealthKit reading when the bump landed)
 ```
 
 `location` is stored as a `GeoPoint` for potential future geo-queries;

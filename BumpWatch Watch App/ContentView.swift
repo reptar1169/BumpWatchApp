@@ -13,6 +13,8 @@ struct ContentView: View {
                     .font(.system(.title2, design: .rounded).monospacedDigit())
                 bumpCountLine
                     .font(.caption)
+                heartRateLine
+                    .font(.caption2)
             } else if rideManager.isStarting {
                 // Deliberately not ProgressView() -- confirmed on-device
                 // that it triggers a synchronous, first-time CoreUI
@@ -99,6 +101,17 @@ struct ContentView: View {
         let magnitudeText = Text(" · last \(String(format: "%.2f", magnitude))g")
             .foregroundColor(BumpSeverity.color(forMagnitudeG: magnitude))
         return base + magnitudeText
+    }
+
+    /// "♥ 142 bpm" once a reading has arrived, or a plain placeholder
+    /// beforehand -- mirrors bumpCountLine's "show something stable, fill
+    /// in the real value once it lands" approach so the layout doesn't jump
+    /// when the first heart rate sample comes in.
+    private var heartRateLine: Text {
+        guard let bpm = rideManager.currentHeartRateBPM else {
+            return Text("♥ --").foregroundColor(.secondary)
+        }
+        return Text("♥ \(Int(bpm.rounded())) bpm").foregroundColor(.secondary)
     }
 
     private func togglePause() {

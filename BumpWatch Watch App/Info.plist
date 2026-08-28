@@ -17,11 +17,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>BumpWatch starts a cycling workout session so it can keep tracking in the background.</string>
+	<string>BumpWatch starts a cycling workout session so it can keep tracking in the background, and reads your heart rate during the ride.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>BumpWatch saves your ride as a workout.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

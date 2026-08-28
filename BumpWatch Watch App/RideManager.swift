@@ -27,6 +27,12 @@ final class RideManager: NSObject, ObservableObject {
     /// until the first bump lands. Drives the merged "N bumps · last X.XXg"
     /// line in ContentView, colored via BumpSeverity.
     @Published var lastBumpMagnitudeG: Double?
+    /// Most recent heart rate reading (bpm) from HealthKit for the
+    /// in-progress ride. Nil until the first sample arrives -- on watchOS
+    /// this is usually within a few seconds of starting a workout session,
+    /// but can take longer if the sensor hasn't acquired a signal yet (e.g.
+    /// a loose band).
+    @Published var currentHeartRateBPM: Double?
     @Published var lastError: String?
 
     private let healthStore = HKHealthStore()
@@ -38,6 +44,13 @@ final class RideManager: NSObject, ObservableObject {
     private let bumpDetector = BumpDetector()
 
     private var currentRide: RideRecord?
+    /// Ride-long average/max heart rate, refreshed from HealthKit's own
+    /// running statistics every time a new heart rate sample is collected
+    /// (see updateHeartRate(from:)). HealthKit computes these directly from
+    /// every sample it has collected for the workout, so there's no need to
+    /// separately track a running sum/count here.
+    private var rideAverageHeartRateBPM: Double?
+    private var rideMaxHeartRateBPM: Double?
     private var rideStartDate: Date?
     private var timer: Timer?
     private var lastSaveDate: Date = .distantPast
@@ -61,7 +74,13 @@ final class RideManager: NSObject, ObservableObject {
 
         guard HKHealthStore.isHealthDataAvailable() else { return }
         let share: Set = [HKObjectType.workoutType()]
-        let read: Set<HKObjectType> = [HKObjectType.workoutType()]
+        var read: Set<HKObjectType> = [HKObjectType.workoutType()]
+        // Heart rate is read-only here -- we never write samples ourselves,
+        // just read what HealthKit collects automatically during the
+        // workout session (see HKLiveWorkoutDataSource in beginRide()).
+        if let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate) {
+            read.insert(heartRateType)
+        }
         healthStore.requestAuthorization(toShare: share, read: read) { [weak self] success, error in
             Task { @MainActor in
                 guard let self else { return }
@@ -171,6 +190,9 @@ final class RideManager: NSObject, ObservableObject {
         pauseStartDate = nil
         bumpCount = 0
         lastBumpMagnitudeG = nil
+        currentHeartRateBPM = nil
+        rideAverageHeartRateBPM = nil
+        rideMaxHeartRateBPM = nil
         lastError = nil
     }
 
@@ -302,7 +324,8 @@ final class RideManager: NSObject, ObservableObject {
             latitude: location?.coordinate.latitude ?? 0,
             longitude: location?.coordinate.longitude ?? 0,
             horizontalAccuracyMeters: location?.horizontalAccuracy ?? -1,
-            speedMetersPerSecond: location?.speed ?? -1
+            speedMetersPerSecond: location?.speed ?? -1,
+            heartRateBPM: currentHeartRateBPM
         )
         ride.bumps.append(bump)
         currentRide = ride
@@ -336,11 +359,33 @@ final class RideManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Heart rate
+
+    private static let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+
+    /// Pulls the latest live/average/max heart rate out of HealthKit's own
+    /// running statistics for the workout -- HealthKit aggregates these
+    /// from every sample it has collected so far, so there's nothing to
+    /// accumulate manually here.
+    private func updateHeartRate(from statistics: HKStatistics) {
+        if let mostRecent = statistics.mostRecentQuantity()?.doubleValue(for: Self.heartRateUnit) {
+            currentHeartRateBPM = mostRecent
+        }
+        if let average = statistics.averageQuantity()?.doubleValue(for: Self.heartRateUnit) {
+            rideAverageHeartRateBPM = average
+        }
+        if let max = statistics.maximumQuantity()?.doubleValue(for: Self.heartRateUnit) {
+            rideMaxHeartRateBPM = max
+        }
+    }
+
     // MARK: - Finish
 
     private func finalizeRide(endedAt: Date) {
         guard var ride = currentRide else { return }
         ride.endTime = endedAt
+        ride.averageHeartRateBPM = rideAverageHeartRateBPM
+        ride.maxHeartRateBPM = rideMaxHeartRateBPM
         currentRide = nil
         rideStartDate = nil
 
@@ -381,6 +426,20 @@ extension RideManager: HKWorkoutSessionDelegate {
 // MARK: - HKLiveWorkoutBuilderDelegate
 
 extension RideManager: HKLiveWorkoutBuilderDelegate {
-    nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {}
+    /// Fires whenever the workout builder has new samples for one or more
+    /// types. `HKLiveWorkoutDataSource` collects heart rate automatically
+    /// once a workout session is active -- no `enableCollection(for:)` call
+    /// is needed for it, unlike sample types outside the default set for
+    /// the configured activity type.
+    nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
+        guard let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate),
+              collectedTypes.contains(heartRateType),
+              let statistics = workoutBuilder.statistics(for: heartRateType) else { return }
+
+        Task { @MainActor in
+            self.updateHeartRate(from: statistics)
+        }
+    }
+
     nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
 }
