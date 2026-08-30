@@ -214,8 +214,28 @@ exports.recomputeTopStretches = onSchedule(
   {
     schedule: "0 9 * * *", // ~1-2am US Pacific, adjust freely -- see comment above
     region: "us-east1",
-    timeoutSeconds: 300, // generous headroom for Nominatim/Overpass pacing across several metros
+    // 300s was the original guess here and it was wrong -- a real run hit
+    // overpass.private.coffee during a multi-minute 500/502 outage and the
+    // FIRST invocation didn't even finish geocoding its first stretch
+    // before Cloud Run killed it at the 300s mark. 1800s gives real
+    // headroom for a bad mirror day (multiple retries at 15/30/60/120s
+    // backoff, across several stretches) without needing to redesign the
+    // retry/circuit-breaker logic itself. Worth knowing this is still not
+    // an absolute guarantee -- a sufficiently prolonged full outage across
+    // ALL THREE Overpass mirrors could in principle still exceed even
+    // this, since the circuit breaker clears and retries everything once
+    // all three go dead (see deadOverpassMirrors in topStretchesCore.js) --
+    // but that's a much rarer failure mode than what actually happened
+    // here, and missing one night's recompute is harmless regardless (see
+    // header comment).
+    timeoutSeconds: 1800,
     memory: "512MiB",
+    // Explicit rather than relying on the default -- a failed run isn't
+    // urgent (there's always tomorrow night, or a manual Force Run), and
+    // an automatic retry piling a second concurrent invocation onto an
+    // already-struggling Overpass mirror is actively counterproductive,
+    // which is part of what happened during the incident described above.
+    retryCount: 0,
   },
   async () => {
     logger.info("recomputeTopStretches: starting");
