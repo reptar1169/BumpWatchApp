@@ -325,6 +325,7 @@ final class RideManager: NSObject, ObservableObject {
             longitude: location?.coordinate.longitude ?? 0,
             horizontalAccuracyMeters: location?.horizontalAccuracy ?? -1,
             speedMetersPerSecond: location?.speed ?? -1,
+            headingDegrees: location?.course ?? -1,
             heartRateBPM: currentHeartRateBPM
         )
         ride.bumps.append(bump)

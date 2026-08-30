@@ -9,6 +9,8 @@ import {
   collectionGroup,
   collection,
   getDocs,
+  doc,
+  getDoc,
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -142,6 +144,7 @@ const HEAT_GRADIENT = {
 let heatLayer = null;
 let markersLayer = null;
 let cityDotsLayer = null;
+let bikeLanesLayer = null;
 
 // The color ceiling used to be a hand-picked constant, which meant
 // re-guessing it by hand every time BumpDetector.thresholdG changed on the
@@ -211,24 +214,38 @@ function intensityToColor(intensity) {
 
 const SWITCH_TO_CITY_DOTS_ZOOM = 7;
 const SWITCH_TO_MARKERS_ZOOM = 15;
+// Bike lanes are context, not one of the three interchangeable ways of
+// showing bump data above -- it's shown *alongside* whichever of those is
+// active, not swapped in exclusively. Zoomed out past city-dot level the
+// lines would just be illegible clutter across the whole map, so it only
+// comes in once you're roughly at neighborhood scale or closer.
+const SHOW_BIKE_LANES_ZOOM = 13;
 
 function updateLayerForZoom() {
-  if (!heatLayer && !markersLayer && !cityDotsLayer) return; // data hasn't loaded yet
   const zoom = map.getZoom();
 
-  const wantedLayer =
-    zoom >= SWITCH_TO_MARKERS_ZOOM
-      ? markersLayer
-      : zoom < SWITCH_TO_CITY_DOTS_ZOOM
-      ? cityDotsLayer
-      : heatLayer;
+  if (heatLayer || markersLayer || cityDotsLayer) {
+    const wantedLayer =
+      zoom >= SWITCH_TO_MARKERS_ZOOM
+        ? markersLayer
+        : zoom < SWITCH_TO_CITY_DOTS_ZOOM
+        ? cityDotsLayer
+        : heatLayer;
 
-  for (const layer of [heatLayer, markersLayer, cityDotsLayer]) {
-    if (!layer) continue;
-    const shouldShow = layer === wantedLayer;
-    const isShown = map.hasLayer(layer);
-    if (shouldShow && !isShown) layer.addTo(map);
-    if (!shouldShow && isShown) map.removeLayer(layer);
+    for (const layer of [heatLayer, markersLayer, cityDotsLayer]) {
+      if (!layer) continue;
+      const shouldShow = layer === wantedLayer;
+      const isShown = map.hasLayer(layer);
+      if (shouldShow && !isShown) layer.addTo(map);
+      if (!shouldShow && isShown) map.removeLayer(layer);
+    }
+  }
+
+  if (bikeLanesLayer) {
+    const shouldShow = zoom >= SHOW_BIKE_LANES_ZOOM;
+    const isShown = map.hasLayer(bikeLanesLayer);
+    if (shouldShow && !isShown) bikeLanesLayer.addTo(map);
+    if (!shouldShow && isShown) map.removeLayer(bikeLanesLayer);
   }
 }
 
@@ -481,33 +498,156 @@ function buildStretchItemHtml(stretch, rank) {
   `;
 }
 
+// Two independently-computed top 5s from generate-top-stretches.mjs --
+// "weighted" ranks by speed-weighted score (same jolt at a lower speed
+// counts more), "unweighted" ranks by plain total severity. These can
+// genuinely differ in WHICH 5 stretches show up, not just their order --
+// see the script's own comment on why both are worth showing rather than
+// just re-sorting one fixed list of 5.
+const RANKING_NOTES = {
+  weighted:
+    "Weighted so a bump hit at a lower speed counts for more -- a hint the surface itself is the problem, not just speed.",
+  unweighted: "Ranked by total recorded severity only, with no speed adjustment.",
+};
+
+// generate-top-stretches.mjs now groups bumps into rough metro areas
+// FIRST and ranks a top 5 independently within each one (see that script's
+// header comment for why) -- so top-stretches.json holds a `metros` array,
+// each with its own weighted/unweighted top 5, rather than one flat list.
+// The ranking-mode toggle still applies globally: switching to "raw
+// severity" re-renders every metro's section in that mode at once, rather
+// than being a per-metro control.
+let metroRankings = []; // [{ name, lat, lng, weighted: [...], unweighted: [...] }, ...]
+let activeRankingMode = "weighted";
+
+function renderStretchList(metros) {
+  const container = document.getElementById("stretchesList");
+  container.innerHTML = "";
+
+  for (const metro of metros) {
+    const stretches = metro[activeRankingMode] ?? [];
+    if (stretches.length === 0) continue; // shouldn't happen in practice -- processMetro only emits a metro once it has a nonempty top 5 in both modes -- but skip cleanly rather than rendering an empty section if it ever does
+
+    const heading = document.createElement("h3");
+    heading.className = "stretch-metro-heading";
+    heading.textContent = metro.name;
+    container.appendChild(heading);
+
+    const list = document.createElement("ol");
+    list.className = "stretches-list";
+
+    stretches.forEach((stretch, index) => {
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "stretch-item";
+      button.innerHTML = buildStretchItemHtml(stretch, index + 1);
+      button.addEventListener("click", () => flyToStretch(stretch, button));
+      li.appendChild(button);
+      list.appendChild(li);
+    });
+
+    container.appendChild(list);
+  }
+}
+
+function setRankingMode(mode) {
+  activeRankingMode = mode;
+  document.getElementById("rankingNote").textContent = RANKING_NOTES[mode];
+  for (const btn of document.querySelectorAll(".ranking-toggle-btn")) {
+    btn.classList.toggle("is-active", btn.dataset.mode === mode);
+  }
+  renderStretchList(metroRankings);
+}
+
+document.getElementById("rankingWeightedBtn")?.addEventListener("click", () => setRankingMode("weighted"));
+document.getElementById("rankingUnweightedBtn")?.addEventListener("click", () => setRankingMode("unweighted"));
+
 async function loadTopStretches() {
-  const response = await fetch("top-stretches.json", { cache: "no-store" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-  const stretches = Array.isArray(data.stretches) ? data.stretches : [];
-  if (stretches.length === 0) return; // section stays hidden -- nothing to show yet
+  // Reads the topStretches/current doc directly -- functions/index.js's
+  // recomputeTopStretches runs the clustering/scoring/geocoding pipeline
+  // (see functions/topStretchesCore.js) on a nightly schedule and writes
+  // its result straight into Firestore, so the page always shows whatever
+  // that job last produced with no redeploy needed in between.
+  // scripts/generate-top-stretches.mjs still exists as a LOCAL PREVIEW
+  // tool (see its header comment) but nothing on the live site reads its
+  // output file anymore.
+  const snapshot = await getDoc(doc(db, "topStretches", "current"));
+  if (!snapshot.exists()) return; // section stays hidden -- nightly job hasn't run yet
+  const data = snapshot.data();
+  const metros = Array.isArray(data.metros) ? data.metros : [];
+  const hasAnyStretches = metros.some(
+    (metro) => (metro.weighted?.length ?? 0) > 0 || (metro.unweighted?.length ?? 0) > 0
+  );
+  if (!hasAnyStretches) return; // section stays hidden -- nothing to show yet
 
-  const list = document.getElementById("stretchesList");
-  list.innerHTML = "";
-
-  stretches.forEach((stretch, index) => {
-    const li = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "stretch-item";
-    button.innerHTML = buildStretchItemHtml(stretch, index + 1);
-    button.addEventListener("click", () => flyToStretch(stretch, button));
-    li.appendChild(button);
-    list.appendChild(li);
-  });
+  metroRankings = metros;
+  setRankingMode(activeRankingMode);
 
   document.getElementById("priority-stretches").hidden = false;
 }
 
 loadTopStretches().catch((error) => {
-  // Not a user-facing failure -- top-stretches.json is regenerated by hand
-  // (see scripts/generate-top-stretches.mjs) and won't exist until the
-  // first run, or might be mid-refresh. The section just stays hidden.
+  // Not a user-facing failure -- the topStretches/current doc is written
+  // by a nightly Cloud Function (see comment above) and won't exist until
+  // its first run. The section just stays hidden.
   console.warn("Priority stretches unavailable:", error);
+});
+
+// ---------------------------------------------------------------------------
+// Bike lane overlay
+// ---------------------------------------------------------------------------
+// Reads the static bike-lanes.geojson (see scripts/generate-bike-lanes.mjs)
+// rather than querying Overpass directly -- same reasoning as
+// top-stretches.json: lane geometry barely changes day to day, so a script
+// rerun by hand beats hitting a shared free API on every page load.
+
+// Cool teal family, deliberately apart from the warm heat ramp (bumps) and
+// the yellow stretch highlight -- reads as "infrastructure" rather than
+// "problem" at a glance. Weight/dash also step down with actual physical
+// protection: a solid track is the strongest line, a sharrow the faintest.
+const BIKE_LANE_STYLES = {
+  track: { color: "#3ddc97", weight: 3, opacity: 0.85 },
+  lane: { color: "#35b0c7", weight: 2.5, opacity: 0.75 },
+  shared: { color: "#6b8f96", weight: 2, opacity: 0.6, dashArray: "2, 6" },
+};
+const BIKE_LANE_LABELS = {
+  track: "protected bike path",
+  lane: "painted bike lane",
+  shared: "shared lane (sharrow)",
+};
+
+function styleBikeLaneFeature(feature) {
+  return BIKE_LANE_STYLES[feature.properties.kind] ?? BIKE_LANE_STYLES.lane;
+}
+
+function bindBikeLanePopup(feature, layer) {
+  const label = BIKE_LANE_LABELS[feature.properties.kind] ?? "bike lane";
+  const name = feature.properties.name ?? "Unnamed segment";
+  layer.bindPopup(`<strong>${name}</strong><br>${label}`);
+}
+
+async function loadBikeLanes() {
+  const response = await fetch("bike-lanes.geojson", { cache: "no-store" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  if (!Array.isArray(data.features) || data.features.length === 0) return;
+
+  bikeLanesLayer = L.geoJSON(data, {
+    style: styleBikeLaneFeature,
+    onEachFeature: bindBikeLanePopup,
+  });
+
+  // Data may have already loaded and set the zoom-dependent bump layer
+  // before this resolves (it's a separate fetch) -- apply the same
+  // zoom-based visibility check immediately rather than waiting for the
+  // next zoomend.
+  updateLayerForZoom();
+}
+
+loadBikeLanes().catch((error) => {
+  // Not a user-facing failure -- bike-lanes.geojson is regenerated by hand
+  // (see scripts/generate-bike-lanes.mjs) and won't exist until the first
+  // run. The map just shows bumps without the lane overlay.
+  console.warn("Bike lane overlay unavailable:", error);
 });

@@ -6,8 +6,11 @@ service cloud.firestore {
     // Rides are written only by the submitRide Cloud Function, using the
     // Admin SDK, which bypasses these rules entirely. So `allow write` here
     // is intentionally false for every client (watch, web, anything else) --
-    // the only way data gets in is through the function, which checks the
-    // X-Api-Key header before it ever touches Firestore.
+    // the only way data gets in is through the function, which verifies a
+    // per-rider Firebase auth token (or, during the transition off the old
+    // single shared key, the legacy X-Api-Key header -- see
+    // authenticateRequest() in functions/index.js) before anything touches
+    // Firestore.
     match /rides/{rideId} {
       allow read: if true; // heatmap page reads ride metadata
       allow write: if false;
@@ -23,6 +26,17 @@ service cloud.firestore {
     // nested rule above "looks like" it should cover it.
     match /{path=**}/bumps/{bumpId} {
       allow read: if true; // heatmap page reads bumps (across all rides) to render the layer
+      allow write: if false;
+    }
+
+    // Written only by the recomputeTopStretches scheduled Cloud Function
+    // (see functions/index.js), via the Admin SDK, which bypasses these
+    // rules the same way submitRide does for `rides`/`bumps` above --
+    // `allow write: if false` here is belt-and-suspenders, not the actual
+    // gate. web/bikelanebumps-site/app.js reads this doc directly instead
+    // of the old static top-stretches.json file.
+    match /topStretches/{docId} {
+      allow read: if true;
       allow write: if false;
     }
   }

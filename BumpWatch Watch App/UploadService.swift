@@ -15,11 +15,6 @@ final class UploadService {
     /// Set this to your deployed function URL, e.g.
     /// "https://us-central1-bikelanebump.cloudfunctions.net/submitRide"
     var endpoint: URL = URL(string: "https://us-east1-bikelanebumps.cloudfunctions.net/submitRide")!
-    /// Shared secret checked by the Cloud Function (see functions/index.js).
-    /// This is a lightweight guard, not real authentication -- fine for a
-    /// personal single-user project. See the README for how to upgrade to
-    /// Firebase Auth if you ever open this up beyond yourself.
-    var apiKey: String = "reptar1169"
 
     enum UploadError: Error { case serverRejected(Int), transport(Error) }
 
@@ -33,32 +28,38 @@ final class UploadService {
         return encoder
     }
 
+    /// Every upload authenticates as this rider via AuthService (see its
+    /// header comment) rather than the old shared API key -- each ride now
+    /// carries a real per-rider identity instead of "anyone with the
+    /// key." AuthService.currentIdToken() handles sign-up/refresh, so this
+    /// just needs to ask for a token right before sending.
     func upload(_ ride: RideRecord, completion: @escaping (Result<Void, UploadError>) -> Void) {
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
+        Task {
+            do {
+                let idToken = try await AuthService.shared.currentIdToken()
 
-        do {
-            request.httpBody = try Self.makeEncoder().encode(ride)
-        } catch {
-            completion(.failure(.transport(error)))
-            return
-        }
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+                request.httpBody = try Self.makeEncoder().encode(ride)
 
-        let task = URLSession.shared.dataTask(with: request) { _, response, error in
-            if let error {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    completion(.failure(.serverRejected(code)))
+                    return
+                }
+                completion(.success(()))
+            } catch {
+                // Covers both AuthService failures (couldn't sign in/
+                // refresh -- e.g. no connectivity yet) and the upload
+                // request itself failing; either way the ride stays
+                // marked not-yet-uploaded and retryPendingUploads() below
+                // will try again later, same as before this change.
                 completion(.failure(.transport(error)))
-                return
             }
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                completion(.failure(.serverRejected(code)))
-                return
-            }
-            completion(.success(()))
         }
-        task.resume()
     }
 
     /// Call this on launch and whenever the watch regains connectivity to

@@ -15,6 +15,7 @@
 		51219C88D28CAF41966866F1 /* BumpSeverity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0561231DE98238160E2D2E6E /* BumpSeverity.swift */; };
 		83ECDA44D830681D2AC88A6A /* BumpWatch Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 08EC1541EFE2AF32F93D51CB /* BumpWatch Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8614F5796D9294CFE671C2AE /* LocationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE830EFA7269E57AB07F91AF /* LocationTracker.swift */; };
+		8BB25E5959C7D99D48846D96 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E67E45A1B3B05B66F85A0A1 /* AuthService.swift */; };
 		9A834305AB4AB0001299A1BA /* UploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A41B3883EF1606A165BB54 /* UploadService.swift */; };
 		AE3BE92320177359C6DA7912 /* RideManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0457BC438BFDC7EEF63AA48 /* RideManager.swift */; };
 		CB496476CF4FC8827302D7D5 /* BumpDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAA5953F69393854F3599BCB /* BumpDetector.swift */; };
@@ -52,6 +53,7 @@
 		53A41B3883EF1606A165BB54 /* UploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadService.swift; sourceTree = "<group>"; };
 		88EF0B63EF547BD09F32DFCE /* BumpEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpEvent.swift; sourceTree = "<group>"; };
 		8D13D00E4E8B54585A22A9B4 /* RideStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideStore.swift; sourceTree = "<group>"; };
+		8E67E45A1B3B05B66F85A0A1 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		9C1B61A8D02D7135BC3CFD21 /* BumpWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BumpWatch.entitlements; sourceTree = "<group>"; };
 		CAA5953F69393854F3599BCB /* BumpDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BumpDetector.swift; sourceTree = "<group>"; };
 		CE830EFA7269E57AB07F91AF /* LocationTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTracker.swift; sourceTree = "<group>"; };
@@ -75,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				2333AF6CBF12049E704888CE /* Assets.xcassets */,
+				8E67E45A1B3B05B66F85A0A1 /* AuthService.swift */,
 				CAA5953F69393854F3599BCB /* BumpDetector.swift */,
 				88EF0B63EF547BD09F32DFCE /* BumpEvent.swift */,
 				0561231DE98238160E2D2E6E /* BumpSeverity.swift */,
@@ -200,6 +203,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8BB25E5959C7D99D48846D96 /* AuthService.swift in Sources */,
 				CB496476CF4FC8827302D7D5 /* BumpDetector.swift in Sources */,
 				0AD0C4E018A4AD970FC3880B /* BumpEvent.swift in Sources */,
 				51219C88D28CAF41966866F1 /* BumpSeverity.swift in Sources */,

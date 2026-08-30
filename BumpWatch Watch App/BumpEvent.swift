@@ -25,6 +25,13 @@ struct BumpEvent: Codable, Identifiable {
     /// CoreLocation (-1 if unknown).
     var speedMetersPerSecond: Double
 
+    /// Direction of travel at the time of the bump, in degrees clockwise
+    /// from true north (0-359.9), from CLLocation.course. -1 if CoreLocation
+    /// doesn't have a confident course yet (e.g. just started moving, or
+    /// standing still) -- see CLLocation's own documentation for this same
+    /// sentinel convention.
+    var headingDegrees: Double
+
     /// Rider's heart rate (bpm) at the moment this bump was detected, taken
     /// from the workout session's most recent HealthKit sample. Nil if no
     /// heart rate reading had arrived yet (e.g. the sensor is still

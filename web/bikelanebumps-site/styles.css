@@ -34,6 +34,13 @@
   --heat-550: #ff6f3c;
   --heat-700: #b0141c;
 
+  /* bike lane overlay — cool teal family, deliberately distinct from the
+     warm heat ramp so "infrastructure" and "problem" read apart at a
+     glance. Steps down in strength with actual physical protection. */
+  --lane-track:  #3ddc97;
+  --lane-lane:   #35b0c7;
+  --lane-shared: #6b8f96;
+
   --radius-s: 10px;
   --radius-m: 16px;
   --radius-l: 24px;
@@ -346,6 +353,51 @@ h1, h2, h3 {
   color: var(--text-secondary);
 }
 
+.lane-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(20, 19, 17, 0.82);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.lane-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.lane-swatch {
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  flex: none;
+}
+.lane-swatch-track { background: var(--lane-track); }
+.lane-swatch-lane { background: var(--lane-lane); }
+.lane-swatch-shared {
+  background: repeating-linear-gradient(90deg, var(--lane-shared) 0 4px, transparent 4px 8px);
+}
+
+@media (max-width: 640px) {
+  /* Two pill legends side by side don't fit a narrow map frame -- stack
+     the lane legend above the severity one instead of truncating it. */
+  .lane-legend {
+    left: 16px;
+    right: 16px;
+    bottom: 56px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
 .map-fullscreen-btn {
   position: absolute;
   top: 16px;
@@ -485,6 +537,51 @@ h1, h2, h3 {
    ========================================================================== */
 
 .priority { padding: 0 0 96px; }
+
+.ranking-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.ranking-toggle-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ranking-toggle-btn:hover { color: var(--text-primary); }
+.ranking-toggle-btn.is-active {
+  background: var(--accent-yellow);
+  color: #1a1408;
+}
+
+.ranking-note {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* One heading + <ol> pair per metro area, stacked inside #stretchesList --
+   see app.js's renderStretchList(). */
+.stretch-metro-heading {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 32px 0 12px;
+}
+.stretch-metro-heading:first-child {
+  margin-top: 0;
+}
 
 .stretches-list {
   list-style: none;

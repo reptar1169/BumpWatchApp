@@ -152,6 +152,11 @@
           <span class="legend-bar" aria-hidden="true"></span>
           <span>Severe</span>
         </div>
+        <div class="lane-legend" aria-label="Bike lane types shown on the map">
+          <span class="lane-legend-item"><span class="lane-swatch lane-swatch-track" aria-hidden="true"></span>Protected path</span>
+          <span class="lane-legend-item"><span class="lane-swatch lane-swatch-lane" aria-hidden="true"></span>Painted lane</span>
+          <span class="lane-legend-item"><span class="lane-swatch lane-swatch-shared" aria-hidden="true"></span>Shared lane</span>
+        </div>
       </div>
       <p class="map-refresh"><a href="https://www.bikelanebumps.org">Data not loading? Refresh the page.</a></p>
     </div>
@@ -162,11 +167,21 @@
       <div class="section-head">
         <h2>Priority stretches</h2>
         <p class="section-sub">
-          The 5 stretches recorded so far with the worst combination of how often they get hit
-          and how hard — the ones a city could point to first. Tap one to see it on the map above.
+          For each metro area with enough rides, the 5 stretches recorded so far with the worst
+          combination of how often they get hit and how hard — the ones that metro's city could
+          point to first. Tap one to see it on the map above.
         </p>
       </div>
-      <ol class="stretches-list" id="stretchesList"></ol>
+      <div class="ranking-toggle" role="group" aria-label="Ranking method">
+        <button type="button" class="ranking-toggle-btn is-active" id="rankingWeightedBtn" data-mode="weighted">
+          Speed-weighted
+        </button>
+        <button type="button" class="ranking-toggle-btn" id="rankingUnweightedBtn" data-mode="unweighted">
+          Raw severity
+        </button>
+      </div>
+      <p class="ranking-note" id="rankingNote"></p>
+      <div id="stretchesList"></div>
     </div>
   </section>
 
