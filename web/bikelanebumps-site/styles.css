@@ -481,6 +481,81 @@ h1, h2, h3 {
 }
 
 /* ==========================================================================
+   Priority stretches
+   ========================================================================== */
+
+.priority { padding: 0 0 96px; }
+
+.stretches-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.stretch-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 16px 20px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.stretch-item:hover,
+.stretch-item:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+/* The stretch whose bounds the map is currently showing -- set/cleared by
+   app.js as flyToBounds fires, so the list stays in sync with the map
+   instead of just being a one-way trigger. */
+.stretch-item.is-active {
+  border-color: var(--accent-yellow);
+  background: var(--surface-2);
+}
+
+.stretch-rank {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--accent-yellow);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.stretch-item.is-active .stretch-rank {
+  background: var(--accent-yellow);
+  color: #1a1408;
+}
+
+.stretch-info { flex: 1; min-width: 0; }
+
+.stretch-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.stretch-meta {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+/* ==========================================================================
    How it works
    ========================================================================== */
 

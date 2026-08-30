@@ -5,17 +5,22 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text(statusText)
-                .font(.headline)
-
             if rideManager.isRecording {
+                heartRateHeadline
+
+                if rideManager.isPaused {
+                    Text("Paused")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                }
+
                 Text(formattedElapsed)
                     .font(.system(.title2, design: .rounded).monospacedDigit())
                 bumpCountLine
                     .font(.caption)
-                heartRateLine
-                    .font(.caption2)
             } else if rideManager.isStarting {
+                Text(statusText)
+                    .font(.headline)
                 // Deliberately not ProgressView() -- confirmed on-device
                 // that it triggers a synchronous, first-time CoreUI
                 // theme/asset load on watchOS (visible in the console as
@@ -28,6 +33,8 @@ struct ContentView: View {
                 Text(" ")
                     .font(.caption)
             } else {
+                Text(statusText)
+                    .font(.headline)
                 Text("Tap to start recording your ride")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -79,7 +86,6 @@ struct ContentView: View {
     }
 
     private var statusText: String {
-        if rideManager.isRecording { return rideManager.isPaused ? "Paused" : "Recording" }
         if rideManager.isStarting { return "Starting…" }
         return "BumpWatch"
     }
@@ -103,15 +109,30 @@ struct ContentView: View {
         return base + magnitudeText
     }
 
-    /// "♥ 142 bpm" once a reading has arrived, or a plain placeholder
-    /// beforehand -- mirrors bumpCountLine's "show something stable, fill
-    /// in the real value once it lands" approach so the layout doesn't jump
-    /// when the first heart rate sample comes in.
-    private var heartRateLine: Text {
-        guard let bpm = rideManager.currentHeartRateBPM else {
-            return Text("♥ --").foregroundColor(.secondary)
+    /// The main event of the recording screen -- previously a small
+    /// caption2 "♥ 142 bpm" line, too small to read mid-ride. Now a
+    /// headline-scale readout: a red heart glyph, rendered a size larger
+    /// than the (bold, monospaced) number beside it so the heart itself
+    /// draws the eye first, mirroring how dedicated fitness watch faces
+    /// treat heart rate as the star of the screen rather than one stat
+    /// among several.
+    private var heartRateHeadline: some View {
+        HStack(spacing: 4) {
+            Text("♥")
+                .font(.system(.largeTitle, design: .rounded))
+                .foregroundColor(.red)
+            Text(heartRateValueText)
+                .font(.system(.title, design: .rounded).weight(.bold).monospacedDigit())
         }
-        return Text("♥ \(Int(bpm.rounded())) bpm").foregroundColor(.secondary)
+    }
+
+    /// "126" once a reading has arrived, or a plain placeholder beforehand
+    /// -- mirrors bumpCountLine's "show something stable, fill in the real
+    /// value once it lands" approach so the layout doesn't jump when the
+    /// first heart rate sample comes in.
+    private var heartRateValueText: String {
+        guard let bpm = rideManager.currentHeartRateBPM else { return "--" }
+        return "\(Int(bpm.rounded()))"
     }
 
     private func togglePause() {

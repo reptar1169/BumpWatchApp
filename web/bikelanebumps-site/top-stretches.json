@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-08-30T02:43:28.482Z",
+  "stretches": [
+    {
+      "name": "Merryfield Row near Science Park Road, Torrey Pines",
+      "lat": 32.901385596493704,
+      "lng": -117.23806542119208,
+      "bounds": {
+        "south": 32.8992595131209,
+        "north": 32.903418498326836,
+        "west": -117.24056678019828,
+        "east": -117.23572085125576
+      },
+      "bumpCount": 26,
+      "totalSeverityG": 143.2,
+      "avgSeverityG": 5.51,
+      "avgSpeedMph": 15.4
+    },
+    {
+      "name": "Balboa Avenue near Cannington Drive, Clairemont",
+      "lat": 32.82030992376262,
+      "lng": -117.1712933885023,
+      "bounds": {
+        "south": 32.818694412052565,
+        "north": 32.82189542589111,
+        "west": -117.17355578875177,
+        "east": -117.16842896229063
+      },
+      "bumpCount": 45,
+      "totalSeverityG": 180.18,
+      "avgSeverityG": 4,
+      "avgSpeedMph": 17.3
+    },
+    {
+      "name": "Balboa Avenue near Ruffner Street, Kearny Mesa",
+      "lat": 32.82194741121195,
+      "lng": -117.1579226403699,
+      "bounds": {
+        "south": 32.820115297635915,
+        "north": 32.82433032533311,
+        "west": -117.16032238829762,
+        "east": -117.15553763888853
+      },
+      "bumpCount": 25,
+      "totalSeverityG": 123.99,
+      "avgSeverityG": 4.96,
+      "avgSpeedMph": 13.8
+    },
+    {
+      "name": "Balboa Avenue near Berwick Drive, Clairemont",
+      "lat": 32.820689337486385,
+      "lng": -117.16676421331536,
+      "bounds": {
+        "south": 32.8187536032335,
+        "north": 32.82249275991102,
+        "west": -117.16973906855837,
+        "east": -117.16453663702251
+      },
+      "bumpCount": 28,
+      "totalSeverityG": 145.25,
+      "avgSeverityG": 5.19,
+      "avgSpeedMph": 16.8
+    },
+    {
+      "name": "Opportunity Road between Ruffner Street and Convoy Street, Kearny Mesa",
+      "lat": 32.82525480622184,
+      "lng": -117.15703439336596,
+      "bounds": {
+        "south": 32.82245982063763,
+        "north": 32.82719272155027,
+        "west": -117.15912834549421,
+        "east": -117.15413151177677
+      },
+      "bumpCount": 21,
+      "totalSeverityG": 88.44,
+      "avgSeverityG": 4.21,
+      "avgSpeedMph": 10.4
+    }
+  ]
+}
