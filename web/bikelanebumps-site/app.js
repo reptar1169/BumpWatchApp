@@ -265,6 +265,21 @@ function buildBumpMarker(bump, ceiling) {
   return marker;
 }
 
+// 16-point compass, rounded to the nearest 22.5 degrees -- just enough
+// precision to eyeball which way a rider was facing against the map
+// underneath the marker (e.g. for judging which side of the street/which
+// direction lane a bump belongs to), without cluttering the popup with a
+// raw bearing that's harder to read at a glance.
+const COMPASS_POINTS = [
+  "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+];
+
+function compassLabel(headingDegrees) {
+  const index = Math.round(headingDegrees / 22.5) % COMPASS_POINTS.length;
+  return COMPASS_POINTS[index];
+}
+
 function buildBumpPopupHtml(bump, magnitudeColor) {
   const dateLabel =
     bump.timestamp instanceof Date && !isNaN(bump.timestamp)
@@ -274,10 +289,20 @@ function buildBumpPopupHtml(bump, magnitudeColor) {
     typeof bump.speedMetersPerSecond === "number" && bump.speedMetersPerSecond >= 0
       ? `${(bump.speedMetersPerSecond * 2.23694).toFixed(1)} mph`
       : null;
+  // -1 is CoreLocation's (and BumpEvent's) sentinel for "no confident
+  // heading yet" -- NOT a real bearing -- so this must exclude it the same
+  // way speedLabel excludes a negative speed above. Showing "heading: N
+  // (0°)" for an unknown heading would be actively misleading, worse than
+  // just omitting the row.
+  const headingLabel =
+    typeof bump.headingDegrees === "number" && bump.headingDegrees >= 0
+      ? `${compassLabel(bump.headingDegrees)} (${Math.round(bump.headingDegrees)}\u00b0)`
+      : null;
 
   const rows = [
     dateLabel,
     speedLabel ? `Speed: ${speedLabel}` : null,
+    headingLabel ? `Heading: ${headingLabel}` : null,
     `${bump.lat.toFixed(5)}, ${bump.lng.toFixed(5)}`,
   ].filter(Boolean);
 
@@ -395,6 +420,8 @@ function renderHeatmap(bumpsSnap) {
       timestamp: typeof bump.timestamp?.toDate === "function" ? bump.timestamp.toDate() : null,
       speedMetersPerSecond:
         typeof bump.speedMetersPerSecond === "number" ? bump.speedMetersPerSecond : null,
+      headingDegrees:
+        typeof bump.headingDegrees === "number" ? bump.headingDegrees : null,
     });
   });
 
