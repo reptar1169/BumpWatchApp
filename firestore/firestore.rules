@@ -39,6 +39,24 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // pond2 / cardinal: unrelated to BumpWatch -- these back a separate
+    // weather site whose sensors are Pi Picos writing straight to
+    // Firestore's REST API. No auth requirement here (Firebase Auth's
+    // token-refresh dance is more state than it's worth on a remote
+    // microcontroller you can't easily walk over to), so reads AND writes
+    // are still open to anyone who finds the project config -- the only
+    // guardrail is a size cap, so an open collection can't turn into an
+    // unbounded storage/cost sink from arbitrarily large documents.
+    match /pond2/{docId} {
+      allow read: if true;
+      allow write: if request.resource.size() < 1024;
+    }
+
+    match /cardinal/{docId} {
+      allow read: if true;
+      allow write: if request.resource.size() < 1024;
+    }
   }
 }
 
