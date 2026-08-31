@@ -500,6 +500,11 @@ function flyToStretch(stretch, itemEl) {
     color: "#ffc23d",
     weight: 2,
     fillOpacity: 0.08,
+    // Without this, the rectangle -- being a filled shape drawn on top of
+    // whatever bump markers happen to fall inside it -- swallows clicks
+    // meant for those markers, even at fillOpacity 0.08. It's purely a
+    // visual highlight, so it shouldn't be clickable/hoverable at all.
+    interactive: false,
   }).addTo(map);
 
   map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 17, duration: 0.75 });
