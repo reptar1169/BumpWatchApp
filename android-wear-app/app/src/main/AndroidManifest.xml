@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- BODY_SENSORS covers heart-rate access through API 35. Starting
+         with API 36 (this app's targetSdk), any API that previously
+         needed BODY_SENSORS/BODY_SENSORS_BACKGROUND needs the matching
+         android.permission.health.* permission instead. Keep both so
+         this still works down to minSdk 30. See
+         https://developer.android.com/health-and-fitness/health-services/permissions -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" android:maxSdkVersion="35" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required at runtime (API 33+) to post RideForegroundService's
+         notification at all. Without it, startForeground() still works,
+         but the notification itself silently never shows. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- Standalone: installable and fully usable on the watch with no
+             paired-phone companion app required, same as WKWatchOnly on
+             the Apple Watch side. See
+             https://developer.android.com/training/wearables/apps/standalone-apps -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <uses-library
+            android:name="com.google.android.wearable"
+            android:required="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Backs FOREGROUND_SERVICE_HEALTH/FOREGROUND_SERVICE_LOCATION;
+             see RideForegroundService's header comment for why this
+             exists at all. foregroundServiceType must list every type the
+             service's work actually falls under (API 34+ enforces this at
+             startForeground() call time). -->
+        <service
+            android:name=".ride.RideForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="health|location" />
+    </application>
+</manifest>

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "328681137448",
+    "project_id": "bikelanebumps",
+    "storage_bucket": "bikelanebumps.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:328681137448:android:68ad236f487fd064a85c1d",
+        "android_client_info": {
+          "package_name": "com.jeffschoello.bumpwatch.wear"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "328681137448-e061r8thk6t0o2cj3olj2mb5e9animf4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAatFbBpM3Qr_gQEFFyz5KzdACxHYWf5xc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "328681137448-e061r8thk6t0o2cj3olj2mb5e9animf4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

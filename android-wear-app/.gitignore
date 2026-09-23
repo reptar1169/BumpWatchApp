@@ -1,0 +1,30 @@
+# Build output -- regenerated from source, never worth versioning.
+build/
+.gradle/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio / IntelliJ project-local state.
+.idea/
+*.iml
+local.properties
+
+# macOS Finder metadata.
+.DS_Store
+
+# Signing material -- never commit a keystore. Set up Gradle signing
+# config to read the path/passwords from local.properties or environment
+# variables instead, neither of which are committed either.
+*.jks
+*.keystore
+
+# Built app packages -- these are build output, not source; rebuild them
+# with ./gradlew instead of tracking the binary.
+*.apk
+*.aab
+
+# Secrets / per-environment config.
+.env
+.env.*

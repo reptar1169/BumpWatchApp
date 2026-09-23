@@ -1,0 +1,5 @@
+<resources>
+    <!-- Sampled from BumpWatch Watch App/Assets.xcassets/AppIcon.appiconset
+         (the existing watchOS icon's background) so both platforms match. -->
+    <color name="ic_launcher_background">#191714</color>
+</resources>
