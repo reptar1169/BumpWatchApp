@@ -12,11 +12,13 @@
 //
 // Callers supply already-cleaned-shape bump objects --
 // { latitude, longitude, magnitudeG, horizontalAccuracyMeters,
-// speedMetersPerSecond } -- however they got them (Firestore REST for the
-// standalone script, the Admin SDK for the scheduled function); this
-// module doesn't know or care which. isUsableBump() still runs inside
-// processAllMetros() below, so callers don't need to duplicate that
-// filtering themselves.
+// speedMetersPerSecond, timestamp } -- however they got them (Firestore
+// REST for the standalone script, the Admin SDK for the scheduled
+// function); this module doesn't know or care which, except that
+// `timestamp`, when present, must be a real JS Date (callers convert from
+// whatever Firestore hands them). isUsableBump() and the recency-window
+// filter both still run inside processAllMetros() below, so callers don't
+// need to duplicate that filtering themselves.
 //
 // ---- Why per metro, not one global top 5 ----
 // This used to rank the 5 worst stretches across every bump in Firestore,
@@ -90,6 +92,27 @@ const MIN_BUMPS_PER_STRETCH = 3; // guards against one severe-but-isolated
 const MAX_ACCURACY_METERS = 30; // drop bumps whose GPS fix was too loose to
                                  // trust for street-level clustering.
 
+// A bump older than this is treated as no-longer-representative of
+// CURRENT road conditions and left out of the ranking -- without deleting
+// it from Firestore. This is what keeps a repaved stretch's old
+// rough-road data from outranking a smooth one forever, and it does so
+// automatically for every rider in every metro, with no per-ride
+// bookkeeping: once enough time passes with no fresh evidence a stretch
+// is still bad, it ages out on its own rather than needing someone to
+// notice and flag it (see excludedFromScoring below for the manual
+// override, which is still there for "I know right now, don't make me
+// wait" cases).
+//
+// A stretch nobody has ridden within the window just won't have enough
+// IN-WINDOW bumps to clear MIN_BUMPS_PER_STRETCH below, so it quietly
+// drops off the list rather than being actively penalized for being
+// stale -- it needs fresh confirmation to place again, same as a brand
+// new stretch would. 365 days spans a full riding season in
+// cold-winter metros so a quiet off-season doesn't wrongly age out a
+// still-bad stretch; tune this one constant if that trade-off needs to
+// move either direction.
+const RECENCY_WINDOW_DAYS = 365;
+
 // Metro grouping (see header comment) runs in two passes so the O(n^2)
 // distance-linkage pass below stays cheap even with thousands of bumps:
 // first bin bumps into small seed cells and work with per-cell centroids
@@ -140,7 +163,11 @@ const MAX_SPEED_WEIGHT = 2.5; // cap how much a very slow bump can be
                                // single-handedly dominate a cluster's score.
 const MIN_SPEED_WEIGHT = 0.6; // floor how much a very fast bump gets
                                // discounted, for the same reason in reverse.
-const TOP_N = 5; // per metro, not overall -- see header comment.
+const TOP_N = 10; // per metro, not overall -- see header comment. The site only
+                  // shows 5 by default (see app.js's renderStretchList), with a
+                  // "see next 5" control revealing the rest -- computing and
+                  // geocoding 10 up front means that expansion is instant, no
+                  // second recompute or Firestore round-trip needed.
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
 // Nominatim's usage policy (https://operations.osmfoundation.org/policies/nominatim/)
@@ -161,9 +188,14 @@ const NOMINATIM_USER_AGENT = "bikelanebumps.org top-stretches script (schoelloje
 // mirror once the current one exhausts its retries fixes that without
 // needing to babysit which URL is hardcoded in.
 const OVERPASS_MIRRORS = [
-  "https://overpass.private.coffee/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass-api.de/api/interpreter",
+  // private.coffee keeps just barely succeeding on retry 1 or 2 instead of
+  // fully failing, so the circuit breaker never marks it dead and it never
+  // falls through to the two healthier mirrors above. Tried last now so a
+  // run isn't stuck waiting out its retry budget first; kept in the list
+  // rather than dropped in case it recovers.
+  "https://overpass.private.coffee/api/interpreter",
 ];
 // Overpass's own usage guidance (https://wiki.openstreetmap.org/wiki/Overpass_API)
 // says under 10,000 queries/day is "fine for a one-off use" and asks for an
@@ -173,6 +205,19 @@ const OVERPASS_USER_AGENT = NOMINATIM_USER_AGENT;
 const CROSS_STREET_SEARCH_RADIUS_METERS = 60;
 const OVERPASS_MAX_RETRIES = 4;
 const OVERPASS_RETRY_BASE_DELAY_MS = 15000; // 15s/30s/60s/120s
+// The query string's own [timeout:25] is a hint to the SERVER for how long
+// IT should spend executing -- it does nothing if the server (or something
+// in front of it) just sits on the connection without ever responding.
+// Hit exactly that in production: overpass.private.coffee took multiple
+// MINUTES per attempt to eventually return a 504, not 25 seconds -- so 4
+// retries with backoff still added up to 40+ minutes for a single run and
+// blew through the Cloud Function's own 1800s timeout before it could
+// finish, let alone write anything to Firestore. A client-side abort
+// bounds each attempt to a fixed worst case regardless of how badly a
+// mirror is hanging, which is what actually makes OVERPASS_MAX_RETRIES and
+// the mirror-to-mirror circuit breaker below behave like their numbers
+// suggest instead of ballooning unpredictably.
+const OVERPASS_FETCH_TIMEOUT_MS = 30000;
 
 // Circuit breaker across the whole run -- a mirror that's already
 // exhausted its retries once gets skipped on every later cross-street
@@ -218,6 +263,15 @@ function isUsableBump(bump) {
     return false;
   }
   return true;
+}
+
+// See RECENCY_WINDOW_DAYS above. A bump with no usable timestamp (older
+// data predating the field, or a parsing hiccup upstream) is let through
+// rather than silently dropped -- a schema gap shouldn't quietly erase
+// data that was never actually flagged as stale.
+function isWithinRecencyWindow(bump, cutoffMs) {
+  if (!(bump.timestamp instanceof Date) || Number.isNaN(bump.timestamp.getTime())) return true;
+  return bump.timestamp.getTime() >= cutoffMs;
 }
 
 // ---- Grid math shared by both clustering passes ----
@@ -464,10 +518,27 @@ function speedWeightFor(speedMetersPerSecond) {
   return Math.min(MAX_SPEED_WEIGHT, Math.max(MIN_SPEED_WEIGHT, raw));
 }
 
+// A stretch ridden N times racks up roughly N times the bumps and total
+// severity of the same stretch ridden once, even if it's genuinely no
+// worse per ride -- so ranking by a raw total effectively rewards "ridden
+// more often" over "actually worse," and a frequently-ridden mediocre
+// stretch can bump a rarely-ridden but far worse one out of the top N.
+// Dividing by how many DISTINCT rides contributed (not bump count, which
+// scales with rides for the same reason) corrects for that: two rides
+// each hitting the same 10 bumps score the same as one ride hitting those
+// 10 bumps once, rather than double. Falls back to 1 if no bump in the
+// cluster carries a rideId (shouldn't happen given the schema, but scoring
+// shouldn't divide by zero over it).
+function countDistinctRides(bumps) {
+  const rideIds = new Set(bumps.map((b) => b.rideId).filter(Boolean));
+  return rideIds.size || 1;
+}
+
 function summarizeCluster(bumps) {
   const count = bumps.length;
   const totalSeverityG = bumps.reduce((sum, b) => sum + b.magnitudeG, 0);
   const avgSeverityG = totalSeverityG / count;
+  const rideCount = countDistinctRides(bumps);
 
   // Speed-weighted score -- see speedWeightFor(). This drives ranking; the
   // plain totalSeverityG/avgSeverityG above stay unweighted since those are
@@ -515,7 +586,13 @@ function summarizeCluster(bumps) {
     avgSpeedMph: avgSpeedMph == null ? null : Math.round(avgSpeedMph * 10) / 10,
     centroid,
     bounds,
-    score: weightedSeverityG,
+    rideCount,
+    // Per-ride, not per-cluster totals -- see countDistinctRides above for
+    // why. These two are what actually drive ranking; totalSeverityG
+    // itself never gets divided, since it's still shown to readers as a
+    // literal "N bumps, X.Xg total" figure and needs to stay that.
+    score: weightedSeverityG / rideCount,
+    unweightedScore: totalSeverityG / rideCount,
   };
 }
 
@@ -618,6 +695,11 @@ async function queryOverpassMirror(mirrorUrl, query) {
           "User-Agent": OVERPASS_USER_AGENT,
         },
         body: query,
+        // AbortSignal.timeout rejects with a DOMException ("TimeoutError")
+        // once this fires, which the catch below treats the same as any
+        // other network-level failure -- retryable, same as a rejected
+        // fetch() already was.
+        signal: AbortSignal.timeout(OVERPASS_FETCH_TIMEOUT_MS),
       });
     } catch (error) {
       networkErrorMessage = error.message;
@@ -760,6 +842,9 @@ async function buildStretchEntry(cluster) {
     totalSeverityG: summary.totalSeverityG,
     avgSeverityG: summary.avgSeverityG,
     avgSpeedMph: summary.avgSpeedMph,
+    // Exposed mainly so a reader (or a future UI) can tell "one bad ride"
+    // apart from "corroborated across N rides" -- see countDistinctRides.
+    rideCount: summary.rideCount,
   };
 }
 
@@ -783,7 +868,7 @@ async function processMetro(metroBumps) {
   // versa. That's the whole point of offering both on the site.
   const weightedRanked = [...clusters].sort((a, b) => b.summary.score - a.summary.score).slice(0, TOP_N);
   const unweightedRanked = [...clusters]
-    .sort((a, b) => b.summary.totalSeverityG - a.summary.totalSeverityG)
+    .sort((a, b) => b.summary.unweightedScore - a.summary.unweightedScore)
     .slice(0, TOP_N);
 
   // Geocode each DISTINCT cluster needed by either list exactly once --
@@ -831,7 +916,13 @@ async function processAllMetros(rawBumps) {
   const usableBumps = rawBumps.filter(isUsableBump);
   console.log(`${usableBumps.length} usable after dropping (0,0)/low-accuracy fixes (of ${rawBumps.length} total).`);
 
-  const metroGroups = groupByMetro(usableBumps);
+  const recencyCutoffMs = Date.now() - RECENCY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const recentBumps = usableBumps.filter((bump) => isWithinRecencyWindow(bump, recencyCutoffMs));
+  console.log(
+    `${recentBumps.length} within the ${RECENCY_WINDOW_DAYS}-day recency window (of ${usableBumps.length} usable).`
+  );
+
+  const metroGroups = groupByMetro(recentBumps);
   console.log(`${metroGroups.length} rough metro area(s) of bumps to process.`);
 
   const metros = [];
@@ -853,4 +944,12 @@ async function processAllMetros(rawBumps) {
   return { metros };
 }
 
-module.exports = { processAllMetros, isUsableBump, groupByMetro, clusterBumps, summarizeCluster };
+module.exports = {
+  processAllMetros,
+  isUsableBump,
+  isWithinRecencyWindow,
+  RECENCY_WINDOW_DAYS,
+  groupByMetro,
+  clusterBumps,
+  summarizeCluster,
+};
