@@ -5,6 +5,12 @@ const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const {
+  findShareTarget,
+  renderShareImage,
+  buildSharePageHtml,
+  buildFallbackPageHtml,
+} = require("./shareCard");
 
 initializeApp();
 const db = getFirestore();
@@ -30,6 +36,68 @@ const MAX_BATCH_SIZE = 450; // Firestore batch limit is 500 writes; leave headro
 // Only worth having now that the app is public on the App Store rather
 // than just running on Jeff's own Watch.
 const MAX_BUMPS_PER_RIDE = 5000;
+
+// ---- Route points ("ride coverage" -- see functions/topStretchesCore.js's
+// sibling doc, the map's ride-coverage layer) ----
+// A route point is a periodic GPS sample taken throughout the ride,
+// independent of bump detection -- see RoutePoint in both watch apps'
+// RideManager. Unlike bumps, these don't need per-point Firestore queries
+// (the map always reads a whole ride's route at once, never one point at a
+// time), so they're stored as a single array field on the ride doc itself
+// rather than a subcollection -- no batching needed, same request that
+// already writes the ride's metadata.
+const MAX_ROUTE_POINTS_PER_RIDE = 3000; // mirrors both watch apps'
+                                         // client-side cap -- keeps a
+                                         // malformed or abusive payload
+                                         // bounded even if a client's own
+                                         // cap is bypassed.
+
+// A route is a far bigger privacy exposure than a scattered bump point --
+// it's the shape of somewhere a specific person actually went, and a route
+// that starts or ends at a house is a home address, especially on a quiet
+// block with only one or two riders. This trims every point within this
+// radius of the route's own first/last point before it's ever written to
+// Firestore, the same way Strava's privacy zones work. A ride short enough
+// that its whole route sits inside 2x this radius trims away to nothing --
+// intentional: better an empty route than one that's essentially all
+// "near home."
+const ROUTE_ENDPOINT_TRIM_METERS = 150;
+
+const METERS_PER_DEGREE_LAT = 111_320; // same constant topStretchesCore.js
+                                        // uses for its own grid math.
+
+function metersBetween(a, b) {
+  const latMidRadians = ((a.latitude + b.latitude) / 2) * (Math.PI / 180);
+  const dLat = (a.latitude - b.latitude) * METERS_PER_DEGREE_LAT;
+  const dLng = (a.longitude - b.longitude) * METERS_PER_DEGREE_LAT * Math.cos(latMidRadians);
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+// Trims by straight-line radius from the route's own endpoint, not
+// cumulative distance traveled -- deliberately, so a loop ride that passes
+// back near its own start mid-route gets that pass trimmed too, instead of
+// only ever protecting the first/last few minutes of travel time.
+function trimRouteEndpoints(points) {
+  if (points.length === 0) return [];
+
+  const originStart = points[0];
+  let startIdx = 0;
+  while (
+    startIdx < points.length &&
+    metersBetween(points[startIdx], originStart) < ROUTE_ENDPOINT_TRIM_METERS
+  ) {
+    startIdx++;
+  }
+
+  const originEnd = points[points.length - 1];
+  let endIdx = points.length - 1;
+  while (endIdx >= 0 && metersBetween(points[endIdx], originEnd) < ROUTE_ENDPOINT_TRIM_METERS) {
+    endIdx--;
+  }
+
+  if (startIdx > endIdx) return [];
+  return points.slice(startIdx, endIdx + 1);
+}
 
 // ---- Auth ----
 // Two accepted forms, checked in this order:
@@ -100,6 +168,31 @@ exports.submitRide = onRequest(
       return;
     }
 
+    const rawRoutePoints = Array.isArray(ride.routePoints) ? ride.routePoints : [];
+    if (rawRoutePoints.length > MAX_ROUTE_POINTS_PER_RIDE) {
+      res.status(400).send(`Ride route too large (max ${MAX_ROUTE_POINTS_PER_RIDE} points)`);
+      return;
+    }
+    // Same "drop the bad ones, don't fail the whole ride" approach
+    // topStretchesCore.js's isUsableBump takes with bumps -- a malformed
+    // point (missing field, the (0,0) no-fix sentinel) is just excluded
+    // from the route rather than rejecting an otherwise-good upload.
+    const cleanedRoutePoints = rawRoutePoints
+      .filter(
+        (p) =>
+          p &&
+          typeof p.latitude === "number" &&
+          typeof p.longitude === "number" &&
+          typeof p.rideElapsedSeconds === "number" &&
+          !(p.latitude === 0 && p.longitude === 0)
+      )
+      .map((p) => ({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        rideElapsedSeconds: p.rideElapsedSeconds,
+      }));
+    const routePoints = trimRouteEndpoints(cleanedRoutePoints);
+
     const startTime = new Date(ride.startTime);
     const endTime = ride.endTime ? new Date(ride.endTime) : null;
     if (isNaN(startTime.getTime())) {
@@ -114,6 +207,7 @@ exports.submitRide = onRequest(
           startTime,
           endTime,
           bumpCount: ride.bumps.length,
+          routePoints,
           averageHeartRateBPM:
             typeof ride.averageHeartRateBPM === "number" ? ride.averageHeartRateBPM : null,
           maxHeartRateBPM:
@@ -186,29 +280,184 @@ exports.submitRide = onRequest(
 // top-stretches specifically -- see the README for why bike-lane
 // generation (scripts/generate-bike-lanes.mjs) is NOT included here yet.
 //
-// Once a night is deliberately conservative: this pipeline makes real
-// calls to Nominatim (1/sec) and Overpass (rate-limited, multi-mirror with
-// retries) for every stretch across every metro, and ridden area doesn't
-// meaningfully change hour to hour. Nothing about the design requires
+// Once a night is already deliberately conservative: this pipeline makes
+// real calls to Nominatim (1/sec) and Overpass (rate-limited, multi-mirror
+// with retries) for every stretch across every metro. While the app has
+// few enough riders that most nights get zero new rides, most of those
+// nightly runs would just regenerate the exact same result -- so
+// recomputeTopStretches below skips the night entirely (no Nominatim/
+// Overpass calls, no Firestore write) unless a ride has actually landed
+// since the last successful recompute. See hasNewRideSinceLastRecompute()
+// and forceRecomputeTopStretches (further down) for the escape hatch this
+// gate needs: the Firebase console's "Force run" button just re-fires
+// this same scheduled trigger, so it would ALSO get skipped on a quiet
+// night -- forceRecomputeTopStretches is a separate, always-unconditional
+// endpoint for retesting a code change against existing data without
+// waiting for (or faking) a new ride. Nothing about any of this requires
 // nightly specifically -- adjust the schedule below if that cadence stops
 // fitting how fast new cities/riders show up.
 const { processAllMetros } = require("./topStretchesCore");
 
-async function fetchAllBumpsForRecompute() {
-  const snapshot = await db.collectionGroup("bumps").get();
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      latitude: typeof data.latitude === "number" ? data.latitude : null,
-      longitude: typeof data.longitude === "number" ? data.longitude : null,
-      magnitudeG: typeof data.magnitudeG === "number" ? data.magnitudeG : null,
-      horizontalAccuracyMeters:
-        typeof data.horizontalAccuracyMeters === "number" ? data.horizontalAccuracyMeters : null,
-      speedMetersPerSecond:
-        typeof data.speedMetersPerSecond === "number" ? data.speedMetersPerSecond : null,
-    };
-  });
+// True if a ride has been saved since the last successful recompute (or if
+// there's no record of a successful recompute yet at all). Deliberately
+// timestamp-comparison rather than a hand-maintained "dirty" flag written
+// by submitRide -- one less write on the ride-upload hot path, and it
+// self-heals from existing data instead of silently skipping forever if a
+// flag write ever failed or got missed.
+async function hasNewRideSinceLastRecompute() {
+  const [latestRideSnap, currentSnap] = await Promise.all([
+    db.collection("rides").orderBy("receivedAt", "desc").limit(1).get(),
+    db.collection("topStretches").doc("current").get(),
+  ]);
+
+  if (latestRideSnap.empty) return false; // no rides recorded at all -- nothing to compute yet
+
+  const latestRideAt = latestRideSnap.docs[0].data().receivedAt;
+  if (!latestRideAt) return true; // shouldn't happen, but don't let a missing field mean "skip forever"
+
+  const lastGeneratedAt = currentSnap.exists ? currentSnap.data().generatedAt : null;
+  if (!lastGeneratedAt) return true; // never successfully recomputed -- definitely run
+
+  return latestRideAt.toMillis() > lastGeneratedAt.toMillis();
 }
+
+// The actual recompute -- pulled out of recomputeTopStretches below so
+// forceRecomputeTopStretches can run the exact same pipeline unconditionally,
+// without duplicating it.
+async function runTopStretchesRecompute() {
+  logger.info("recomputeTopStretches: starting");
+  const bumps = await fetchAllBumpsForRecompute();
+  logger.info(`recomputeTopStretches: fetched ${bumps.length} bump documents`);
+
+  const { metros } = await processAllMetros(bumps, { log: (msg) => logger.info(msg) });
+
+  await db.collection("topStretches").doc("current").set({
+    generatedAt: FieldValue.serverTimestamp(),
+    metros,
+  });
+
+  logger.info(`recomputeTopStretches: wrote ${metros.length} metro area(s) to Firestore`);
+}
+
+async function fetchAllBumpsForRecompute() {
+  // Rides flagged excludedFromScoring (set by hand on the ride doc in the
+  // Firestore console) are left in Firestore untouched, but their bumps
+  // are skipped here so a repaved-over ride's old bump data stops
+  // influencing the nightly top-stretches recompute. Nothing is deleted;
+  // this only affects which bumps feed the scoring pipeline.
+  const [bumpsSnapshot, ridesSnapshot] = await Promise.all([
+    db.collectionGroup("bumps").get(),
+    db.collection("rides").get(),
+  ]);
+
+  const excludedRideIds = new Set(
+    ridesSnapshot.docs
+      .filter((doc) => doc.data().excludedFromScoring === true)
+      .map((doc) => doc.id)
+  );
+
+  return bumpsSnapshot.docs
+    .filter((doc) => !excludedRideIds.has(doc.ref.parent.parent.id))
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        latitude: typeof data.latitude === "number" ? data.latitude : null,
+        longitude: typeof data.longitude === "number" ? data.longitude : null,
+        magnitudeG: typeof data.magnitudeG === "number" ? data.magnitudeG : null,
+        horizontalAccuracyMeters:
+          typeof data.horizontalAccuracyMeters === "number" ? data.horizontalAccuracyMeters : null,
+        speedMetersPerSecond:
+          typeof data.speedMetersPerSecond === "number" ? data.speedMetersPerSecond : null,
+        // Admin SDK hands back a Firestore Timestamp -- topStretchesCore's
+        // recency-window filter wants a plain JS Date (see its header
+        // comment on the shared bump shape).
+        timestamp: typeof data.timestamp?.toDate === "function" ? data.timestamp.toDate() : null,
+        // A bump doc's parent is always rides/{rideId} (see the schema
+        // comment above) -- topStretchesCore uses this to tell "one road
+        // ridden many times" apart from "one ride that hit a lot of
+        // bumps," which a raw bump-count/severity total can't distinguish
+        // on its own (see its own comment on rideCount for why that
+        // matters).
+        rideId: doc.ref.parent.parent.id,
+      };
+    });
+}
+
+// ---- Share cards for the top-5 "priority stretches" list ----
+// See shareCard.js's header comment for why this needs to be a real
+// server response rather than something the client-rendered site can
+// produce on its own -- Facebook/X read static <meta> tags, they don't
+// run the site's JS.
+//
+// Firebase Hosting rewrites /share/** to this one function (see
+// firebase.json), so everything after the "/share/" prefix -- both the
+// crawler-facing HTML page and its /image.png -- is parsed and dispatched
+// right here rather than by any router.
+const SITE_ORIGIN = "https://www.bikelanebumps.org";
+const SHARE_PATH_PATTERN = /^\/share\/([^/]+)\/(weighted|unweighted)\/(\d+)(\/image\.png)?\/?$/;
+
+exports.shareCard = onRequest({ region: "us-east1", cors: false }, async (req, res) => {
+  const match = req.path.match(SHARE_PATH_PATTERN);
+  if (!match) {
+    res.status(404).set("Content-Type", "text/html").send(buildFallbackPageHtml(SITE_ORIGIN));
+    return;
+  }
+  const [, metroSlugParam, mode, rankParam, isImageRequest] = match;
+
+  let metros = [];
+  try {
+    const snapshot = await db.collection("topStretches").doc("current").get();
+    if (snapshot.exists) {
+      const data = snapshot.data();
+      metros = Array.isArray(data.metros) ? data.metros : [];
+    }
+  } catch (error) {
+    // A read failure shouldn't 500 a link someone's actively sharing --
+    // fall through to the same "not found" handling as a stale/bad slug.
+    logger.error("shareCard: failed to read topStretches/current", error);
+  }
+
+  const target = findShareTarget(metros, metroSlugParam, mode, rankParam);
+  if (!target) {
+    // Covers both a genuinely malformed slug/rank AND a share link to a
+    // stretch that no longer places in its metro's top 5 after a nightly
+    // recompute -- either way, there's nothing to render, so send whoever
+    // (or whatever crawler) followed the link back to the current list
+    // rather than a bare error.
+    res.status(404).set("Content-Type", "text/html").send(buildFallbackPageHtml(SITE_ORIGIN));
+    return;
+  }
+
+  // topStretches/current only changes once a night -- an hour of caching
+  // means a crawler re-fetching a link preview it already has doesn't
+  // regenerate the same PNG/HTML on every hit, without risking a stale
+  // response sticking around long past the next recompute.
+  res.set("Cache-Control", "public, max-age=3600");
+
+  if (isImageRequest) {
+    const buf = renderShareImage({
+      rank: target.rank,
+      metroName: target.metro.name,
+      stretchName: target.stretch.name,
+      bumpCount: target.stretch.bumpCount,
+      avgSeverityG: target.stretch.avgSeverityG,
+    });
+    res.set("Content-Type", "image/png");
+    res.status(200).send(buf);
+    return;
+  }
+
+  const html = buildSharePageHtml({
+    siteOrigin: SITE_ORIGIN,
+    metroSlugParam,
+    mode,
+    rank: target.rank,
+    metro: target.metro,
+    stretch: target.stretch,
+  });
+  res.set("Content-Type", "text/html");
+  res.status(200).send(html);
+});
 
 exports.recomputeTopStretches = onSchedule(
   {
@@ -231,24 +480,60 @@ exports.recomputeTopStretches = onSchedule(
     timeoutSeconds: 1800,
     memory: "512MiB",
     // Explicit rather than relying on the default -- a failed run isn't
-    // urgent (there's always tomorrow night, or a manual Force Run), and
+    // urgent (there's always tomorrow night, or forceRecomputeTopStretches), and
     // an automatic retry piling a second concurrent invocation onto an
     // already-struggling Overpass mirror is actively counterproductive,
     // which is part of what happened during the incident described above.
     retryCount: 0,
   },
   async () => {
-    logger.info("recomputeTopStretches: starting");
-    const bumps = await fetchAllBumpsForRecompute();
-    logger.info(`recomputeTopStretches: fetched ${bumps.length} bump documents`);
+    if (!(await hasNewRideSinceLastRecompute())) {
+      logger.info("recomputeTopStretches: no new rides since the last recompute, skipping");
+      return;
+    }
+    await runTopStretchesRecompute();
+  }
+);
 
-    const { metros } = await processAllMetros(bumps, { log: (msg) => logger.info(msg) });
+// ---- Manual, unconditional recompute (bypasses the gate above) ----
+// recomputeTopStretches skips a night where nothing changed, but the
+// Firebase console's "Force run" re-fires that exact same scheduled
+// trigger with no way to pass it a bypass flag -- so it would ALSO get
+// skipped on a quiet night. This is the escape hatch: hit this endpoint
+// instead of the console's Force Run when retesting a code change against
+// whatever's already in Firestore, no new ride required. Same auth as
+// submitRide (this also burns real Nominatim/Overpass quota and rewrites
+// what every visitor sees, so it shouldn't be open to just anyone) --
+// call it with:
+//   curl -X POST -H "X-Api-Key: <BUMPWATCH_API_KEY>" <this function's URL>
+exports.forceRecomputeTopStretches = onRequest(
+  {
+    region: "us-east1",
+    secrets: [API_KEY],
+    cors: false,
+    // Same reasoning as recomputeTopStretches's own timeoutSeconds comment
+    // above -- a bad Overpass-mirror day needs real headroom.
+    timeoutSeconds: 1800,
+    memory: "512MiB",
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method not allowed");
+      return;
+    }
 
-    await db.collection("topStretches").doc("current").set({
-      generatedAt: FieldValue.serverTimestamp(),
-      metros,
-    });
+    const authResult = await authenticateRequest(req);
+    if (!authResult.ok) {
+      res.status(401).send(authResult.message);
+      return;
+    }
 
-    logger.info(`recomputeTopStretches: wrote ${metros.length} metro area(s) to Firestore`);
+    try {
+      await runTopStretchesRecompute();
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      logger.error("forceRecomputeTopStretches failed", error);
+      res.status(500).send("Internal error");
+    }
   }
 );

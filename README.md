@@ -228,6 +228,20 @@ top-stretches specifically -- necessary now that rides can arrive from
 riders in different cities on their own schedule, not just in the
 occasional batch you'd run yourself and remember to redeploy after.
 
+The nightly run skips itself (no Nominatim/Overpass calls, no Firestore
+write) unless a ride has been saved since the last successful recompute --
+worth doing while the app has few enough riders that most nights are
+otherwise a no-op burning real API quota for an identical result. Because
+of that gate, the Firebase console's "Force run" button on
+`recomputeTopStretches` will ALSO skip on a quiet night (it just re-fires
+the same scheduled trigger, with no way to pass it a bypass). To force a
+real recompute against whatever's already in Firestore -- e.g. retesting a
+code change without waiting for a new ride -- hit `forceRecomputeTopStretches`
+instead, the same way the watch app authenticates to `submitRide`:
+```
+curl -X POST -H "X-Api-Key: <BUMPWATCH_API_KEY>" <forceRecomputeTopStretches URL>
+```
+
 `scripts/generate-top-stretches.mjs` still exists, but only as a **local
 preview tool** -- useful for checking a tuning change (e.g. a different
 `REFERENCE_SPEED_MPS` in `topStretchesCore.js`) against real data faster

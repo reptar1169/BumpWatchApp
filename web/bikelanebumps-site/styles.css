@@ -38,8 +38,14 @@
      warm heat ramp so "infrastructure" and "problem" read apart at a
      glance. Steps down in strength with actual physical protection. */
   --lane-track:  #3ddc97;
-  --lane-lane:   #35b0c7;
+  --lane-lane:   #2563eb;
   --lane-shared: #6b8f96;
+
+  /* Ride-coverage ("ridden path") dots on the map -- deliberately purple,
+     not teal, so they don't blend into the --lane-track/--lane-lane
+     infrastructure colors above. Keep in sync with COVERAGE_GRADIENT's
+     bright-end color in app.js. */
+  --coverage-ridden: #b18cff;
 
   --radius-s: 10px;
   --radius-m: 16px;
@@ -304,6 +310,100 @@ h1, h2, h3 {
 
 .map-section { padding: 0 0 96px; }
 
+.map-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+.map-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.map-filter-label {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.map-filter-select,
+.map-filter-date {
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 8px 12px;
+}
+.map-filter-select:focus,
+.map-filter-date:focus {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 1px;
+}
+.map-filter-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* [hidden] and .map-filter-custom's own `display: flex` are equal
+   specificity (one attribute selector, one class selector) -- with a tie,
+   the later rule in the cascade wins, and this class comes after the UA
+   stylesheet's `[hidden] { display: none }`. Result: toggling the
+   `hidden` property from JS (see customRangeEl.hidden in app.js) silently
+   did nothing visually -- the custom date inputs and their Apply button
+   stayed on screen even outside "Custom range" preset. This selector
+   bumps the specificity so [hidden] actually wins again. */
+.map-filter-custom[hidden] {
+  display: none;
+}
+.map-filter-to {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+.map-filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.map-filter-toggle input[type="checkbox"] {
+  accent-color: var(--coverage-ridden);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+.coverage-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--coverage-ridden);
+  flex: none;
+}
+.btn-small {
+  padding: 8px 18px;
+  font-size: 0.88rem;
+}
+.map-filter-summary {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+  min-height: 1.2em;
+}
+.map-filter-caveat {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+  margin: 0;
+  max-width: 640px;
+}
+
 .map-frame {
   position: relative;
   border-radius: var(--radius-l);
@@ -311,6 +411,14 @@ h1, h2, h3 {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
   background: var(--surface-1);
+  /* Leaflet's own panes/controls (and our .map-legend/.lane-legend/
+     .map-fullscreen-btn overlays) use z-index values up to 1000 to stack
+     correctly *among themselves*. Without this, .map-frame doesn't
+     establish its own stacking context, so those values compare directly
+     against the rest of the page -- including .site-header's z-index: 100
+     -- and the map ends up drawing over the sticky navbar while scrolling
+     past it. isolation: isolate scopes all of that to inside the map. */
+  isolation: isolate;
 }
 
 #map {
@@ -382,6 +490,7 @@ h1, h2, h3 {
 }
 .lane-swatch-track { background: var(--lane-track); }
 .lane-swatch-lane { background: var(--lane-lane); }
+.lane-swatch-ridden { background: var(--coverage-ridden); }
 .lane-swatch-shared {
   background: repeating-linear-gradient(90deg, var(--lane-shared) 0 4px, transparent 4px 8px);
 }
@@ -538,6 +647,19 @@ h1, h2, h3 {
 
 .priority { padding: 0 0 96px; }
 
+/* AdSense unit between "Priority stretches" and "How it works" -- a plain
+   center-aligned block using the same .wrap max-width as every other
+   section, so it reads as one more piece of the page rather than a
+   foreign widget bolted on. min-height keeps the layout from jumping once
+   the ad slot itself finishes loading and fills in above/below it. */
+.ad-slot {
+  padding: 0 0 96px;
+  text-align: center;
+}
+.ad-slot .wrap {
+  min-height: 100px;
+}
+
 .ranking-toggle {
   display: inline-flex;
   gap: 4px;
@@ -591,26 +713,45 @@ h1, h2, h3 {
   gap: 10px;
 }
 
+/* "See next 5" / "Show fewer" control below a metro's list -- see app.js's
+   renderStretchList(). Dashed + ghost so it reads as "more below," not as
+   another primary action competing with each stretch's own share button. */
+.stretch-expand-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-s);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.stretch-expand-btn:hover,
+.stretch-expand-btn:focus-visible {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+/* Now a plain flex container -- not itself a button -- wrapping two
+   separate controls: .stretch-main (click flies the map to this stretch,
+   same as the old single button used to) and .stretch-share (opens the
+   Facebook/X share card; see app.js's shareStretch). A <button> can't
+   nest inside another <button>, which is why this stopped being one
+   button once sharing needed its own click target alongside it. */
 .stretch-item {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: stretch;
+  gap: 4px;
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  padding: 16px 20px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  padding: 4px;
   transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.stretch-item:hover,
-.stretch-item:focus-visible {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
 }
 
 /* The stretch whose bounds the map is currently showing -- set/cleared by
@@ -619,6 +760,78 @@ h1, h2, h3 {
 .stretch-item.is-active {
   border-color: var(--accent-yellow);
   background: var(--surface-2);
+}
+
+.stretch-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-s);
+  padding: 12px 16px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stretch-main:hover,
+.stretch-main:focus-visible {
+  background: var(--surface-2);
+}
+
+.stretch-share {
+  flex: none;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-right: 4px;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.stretch-share:hover,
+.stretch-share:focus-visible {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+/* Desktop fallback share menu for browsers without the Web Share API --
+   see app.js's openSharePopover. Positioned inline via style.top/left at
+   creation time rather than here, since it's anchored to whichever share
+   button was actually clicked. */
+.share-popover {
+  position: absolute;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.share-popover-link {
+  padding: 10px 16px;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.share-popover-link:hover,
+.share-popover-link:focus-visible {
+  background: var(--surface-1);
 }
 
 .stretch-rank {

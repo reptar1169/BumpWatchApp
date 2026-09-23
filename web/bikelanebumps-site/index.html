@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>bikelanebumps — Mapping Busted Bike Lanes</title>
 <meta name="description" content="A live heatmap of bike lane bumps, potholes, and cracks, built from real ride data recorded on an Apple Watch." />
+<link rel="canonical" href="https://www.bikelanebumps.org/" />
 
 <!-- Social share preview (Open Graph + Twitter Card) -->
 <meta property="og:type" content="website" />
@@ -134,6 +135,45 @@
         <p class="section-sub">Warmer colors mean more bumps, and worse ones. Zoom in on your commute.</p>
       </div>
 
+      <div class="map-filter" id="mapFilter">
+        <div class="map-filter-row">
+          <label class="map-filter-label" for="mapRangePreset">Date range</label>
+          <select class="map-filter-select" id="mapRangePreset">
+            <option value="90d">Last 90 days</option>
+            <option value="6m">Last 6 months</option>
+            <option value="12m" selected>Last 12 months</option>
+            <option value="all">All time</option>
+            <option value="custom">Custom range&hellip;</option>
+          </select>
+          <span class="map-filter-custom" id="mapCustomRange" hidden>
+            <input type="date" class="map-filter-date" id="mapDateFrom" aria-label="From date">
+            <span class="map-filter-to">to</span>
+            <input type="date" class="map-filter-date" id="mapDateTo" aria-label="To date">
+            <button type="button" class="btn btn-ghost btn-small" id="mapRangeApply">Apply</button>
+          </span>
+          <label class="map-filter-label" for="mapSeverityFilter">Severity</label>
+          <select class="map-filter-select" id="mapSeverityFilter">
+            <option value="all" selected>Any severity</option>
+            <option value="above-avg">Above average</option>
+            <option value="worst10">Worst 10%</option>
+            <option value="worst5">Worst 5%</option>
+          </select>
+          <label class="map-filter-toggle">
+            <input type="checkbox" id="mapCoverageToggle" checked>
+            <span class="coverage-swatch" aria-hidden="true"></span>
+            Ride coverage
+          </label>
+        </div>
+        <p class="map-filter-summary" id="mapFilterSummary" aria-live="polite"></p>
+        <p class="map-filter-caveat">
+          Purple dots show streets that have actually been ridden, colored by how recently — a quiet
+          street with none yet may just be unridden, not necessarily smooth. The start and end of
+          every route are trimmed before they're ever stored, so a ride never reveals exactly where
+          it began or ended. Rides recorded before this feature shipped won't have a route to show
+          at all. Zoom in to street level to see it.
+        </p>
+      </div>
+
       <div class="map-frame">
         <div id="map" role="img" aria-label="Heatmap of recorded bike lane bumps"></div>
         <button type="button" class="map-fullscreen-btn" id="mapFullscreenBtn" aria-label="View full screen" hidden>
@@ -152,10 +192,11 @@
           <span class="legend-bar" aria-hidden="true"></span>
           <span>Severe</span>
         </div>
-        <div class="lane-legend" aria-label="Bike lane types shown on the map">
+        <div class="lane-legend" aria-label="Bike lane types and ride coverage shown on the map">
           <span class="lane-legend-item"><span class="lane-swatch lane-swatch-track" aria-hidden="true"></span>Protected path</span>
           <span class="lane-legend-item"><span class="lane-swatch lane-swatch-lane" aria-hidden="true"></span>Painted lane</span>
           <span class="lane-legend-item"><span class="lane-swatch lane-swatch-shared" aria-hidden="true"></span>Shared lane</span>
+          <span class="lane-legend-item"><span class="lane-swatch lane-swatch-ridden" aria-hidden="true"></span>Ridden path</span>
         </div>
       </div>
       <p class="map-refresh"><a href="https://www.bikelanebumps.org">Data not loading? Refresh the page.</a></p>
@@ -182,6 +223,20 @@
       </div>
       <p class="ranking-note" id="rankingNote"></p>
       <div id="stretchesList"></div>
+    </div>
+  </section>
+
+  <section class="ad-slot" aria-label="Advertisement">
+    <div class="wrap">
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-4204496050222131"
+           data-ad-slot="6063215547"
+           data-ad-format="auto"
+           data-full-width-responsive="true"></ins>
+      <script>
+           (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
     </div>
   </section>
 

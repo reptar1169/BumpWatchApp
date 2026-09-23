@@ -52,8 +52,30 @@ const map = L.map("map", {
   preferCanvas: true, // faster rendering for the circle-marker layer as ride data grows
 }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
+// scrollWheelZoom stays off until the map is clicked/focused -- otherwise a
+// plain two-finger scroll while scrolling down the page would get captured
+// by the map instead of scrolling past it.
 map.on("focus", () => map.scrollWheelZoom.enable());
 map.on("blur", () => map.scrollWheelZoom.disable());
+
+// But a pinch gesture (trackpad) or ctrl/cmd+wheel is unambiguously a "zoom
+// this" gesture, never a "scroll the page" one, so it shouldn't need a
+// click first -- and critically, browsers report pinch as a wheel event
+// with ctrlKey set, so leaving it unhandled while scrollWheelZoom is off
+// doesn't just do nothing, it falls through to the browser's own page-zoom.
+// Once the map is focused, Leaflet's own scrollWheelZoom handler already
+// deals with this, so only step in while it's still off.
+map.getContainer().addEventListener(
+  "wheel",
+  (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (map.scrollWheelZoom.enabled()) return;
+    event.preventDefault();
+    const zoomDelta = -event.deltaY * 0.01;
+    map.setZoom(map.getZoom() + zoomDelta, { animate: false });
+  },
+  { passive: false }
+);
 
 // ---------------------------------------------------------------------------
 // Full-screen toggle
@@ -97,10 +119,22 @@ if (fullscreenBtn && mapFrame?.requestFullscreen && document.exitFullscreen) {
 // whenever it resolves, even if that's after the data-driven view below
 // has already been set -- being on your own street beats seeing every bump
 // ever recorded.
+
+// A share link (see shareStretch/applyHighlightFromUrl further down) means
+// the visitor followed a link to see one SPECIFIC stretch -- letting
+// either this file's "center on my current location" or its "fit to
+// every bump on record" initial view fight that would defeat the entire
+// point of the link arriving already framed on it. Checked in both
+// places that would otherwise override the highlight's own view.
+function hasShareHighlight() {
+  return new URLSearchParams(window.location.search).has("highlight");
+}
+
 let userLocated = false;
 
 function centerOnVisitor() {
   if (!("geolocation" in navigator)) return;
+  if (hasShareHighlight()) return; // let applyHighlightFromUrl's flyToStretch own the view instead
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
@@ -145,6 +179,7 @@ let heatLayer = null;
 let markersLayer = null;
 let cityDotsLayer = null;
 let bikeLanesLayer = null;
+let coverageLayer = null;
 
 // The color ceiling used to be a hand-picked constant, which meant
 // re-guessing it by hand every time BumpDetector.thresholdG changed on the
@@ -179,13 +214,17 @@ function hexToRgb(hex) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function intensityToColor(intensity) {
-  const t = Math.max(0, Math.min(1, intensity));
-  for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
-    const a = HEAT_STOPS[i];
-    const b = HEAT_STOPS[i + 1];
-    if (t >= a.stop && t <= b.stop) {
-      const localT = (t - a.stop) / (b.stop - a.stop);
+// Generic stop-list interpolator -- pulled out of what used to be
+// intensityToColor's own body so the ride-coverage layer's recency
+// gradient below can reuse the exact same interpolation instead of a
+// second hand-rolled copy.
+function interpolateStops(stops, t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
+    if (clamped >= a.stop && clamped <= b.stop) {
+      const localT = (clamped - a.stop) / (b.stop - a.stop);
       const [r1, g1, b1] = a.rgb;
       const [r2, g2, b2] = b.rgb;
       return `rgb(${Math.round(r1 + (r2 - r1) * localT)}, ${Math.round(
@@ -193,8 +232,12 @@ function intensityToColor(intensity) {
       )}, ${Math.round(b1 + (b2 - b1) * localT)})`;
     }
   }
-  const [r, g, b] = HEAT_STOPS[HEAT_STOPS.length - 1].rgb;
+  const [r, g, b] = stops[stops.length - 1].rgb;
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+function intensityToColor(intensity) {
+  return interpolateStops(HEAT_STOPS, intensity);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,13 +256,23 @@ function intensityToColor(intensity) {
 // which one is attached to the map based on current zoom.
 
 const SWITCH_TO_CITY_DOTS_ZOOM = 7;
-const SWITCH_TO_MARKERS_ZOOM = 15;
+// Matches SHOW_BIKE_LANES_ZOOM/SHOW_COVERAGE_ZOOM below on purpose --
+// lowered from 15 so individual markers show up at the same "neighborhood
+// scale" zoom where street context (bike lanes, ride coverage) already
+// does, instead of making a visitor zoom in past that just to get past
+// the blurrier heat layer.
+const SWITCH_TO_MARKERS_ZOOM = 13;
 // Bike lanes are context, not one of the three interchangeable ways of
 // showing bump data above -- it's shown *alongside* whichever of those is
 // active, not swapped in exclusively. Zoomed out past city-dot level the
 // lines would just be illegible clutter across the whole map, so it only
 // comes in once you're roughly at neighborhood scale or closer.
 const SHOW_BIKE_LANES_ZOOM = 13;
+// Coverage cells are ~40m -- fine enough to trace a street, way too dense
+// to show zoomed out past neighborhood scale. Same threshold as bike
+// lanes on purpose: both are "which streets" context, meant to read
+// together.
+const SHOW_COVERAGE_ZOOM = 13;
 
 function updateLayerForZoom() {
   const zoom = map.getZoom();
@@ -247,6 +300,13 @@ function updateLayerForZoom() {
     if (shouldShow && !isShown) bikeLanesLayer.addTo(map);
     if (!shouldShow && isShown) map.removeLayer(bikeLanesLayer);
   }
+
+  if (coverageLayer) {
+    const shouldShow = coverageEnabled && zoom >= SHOW_COVERAGE_ZOOM;
+    const isShown = map.hasLayer(coverageLayer);
+    if (shouldShow && !isShown) coverageLayer.addTo(map);
+    if (!shouldShow && isShown) map.removeLayer(coverageLayer);
+  }
 }
 
 map.on("zoomend", updateLayerForZoom);
@@ -259,7 +319,10 @@ function buildBumpMarker(bump, ceiling) {
     weight: 1.5,
     color: "rgba(20, 19, 17, 0.55)",
     fillColor: color,
-    fillOpacity: 0.85,
+    // Lowered from 0.85 -- at zoom >= SWITCH_TO_MARKERS_ZOOM these sit on
+    // top of the ridden-path coverage layer (buildCoverageLine), and at
+    // 0.85 a bump circle fully hid whatever coverage line ran underneath it.
+    fillOpacity: 0.4,
   });
   marker.bindPopup(buildBumpPopupHtml(bump, color));
   return marker;
@@ -384,7 +447,19 @@ async function loadData() {
   ]);
 
   renderStats(bumpsSnap, ridesSnap);
-  renderHeatmap(bumpsSnap);
+
+  allBumps = parseAllBumps(bumpsSnap, ridesSnap);
+  allRides = parseAllRides(ridesSnap);
+  initMapFilters();
+  // Respect a successful geolocation fix on this first load only -- every
+  // later call goes through the filter handlers above, which always
+  // pass fitView: true (see renderBumpLayers's comment on why). Also skip
+  // it for a share-highlight visit, same reasoning as centerOnVisitor's
+  // own guard above -- this fires from whichever of loadData/
+  // loadTopStretches's independent Firestore reads happens to resolve
+  // later, so without this it can just as easily be the one that steals
+  // the view back from the highlighted stretch.
+  applyMapFilters({ fitView: !userLocated && !hasShareHighlight() });
 }
 
 function renderStats(bumpsSnap, ridesSnap) {
@@ -407,10 +482,45 @@ function formatCount(n) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
 }
 
-function renderHeatmap(bumpsSnap) {
-  const bumps = [];
+// Keep in sync with functions/topStretchesCore.js's RECENCY_WINDOW_DAYS --
+// that constant decides what counts as "current" for the priority
+// stretches ranking, this one decides the same thing for the live map, and
+// the two should always agree. 365 days spans a full riding season so a
+// quiet off-season doesn't wrongly hide a still-bad stretch; see that
+// file's comment for the full reasoning.
+const DEFAULT_RANGE_PRESET = "12m"; // matches the old always-on recency
+                                     // window this replaces -- see
+                                     // functions/topStretchesCore.js's
+                                     // RECENCY_WINDOW_DAYS comment for why
+                                     // 12 months is the sensible default
+                                     // (a full riding season, so a quiet
+                                     // off-season doesn't make a still-bad
+                                     // stretch look fixed). The server-side
+                                     // ranking still always uses that fixed
+                                     // window regardless of what a visitor
+                                     // picks here -- this filter only
+                                     // changes what the MAP shows.
 
+// One-time parse of the raw Firestore snapshots into the flat shape the
+// rest of this file works with. Runs once per page load (loadData calls
+// this, then caches the result in allBumps below) -- everything the date
+// filter does afterward re-filters this in-memory array, no refetching.
+//
+// A ride flagged excludedFromScoring (see functions/index.js's
+// fetchAllBumpsForRecompute) is left out here, permanently, independent of
+// whatever date range gets picked -- that flag means "this ride's data is
+// known-stale, don't show it at all," which a date filter shouldn't be
+// able to override by picking a range that happens to include it.
+function parseAllBumps(bumpsSnap, ridesSnap) {
+  const excludedRideIds = new Set(
+    ridesSnap.docs
+      .filter((doc) => doc.data().excludedFromScoring === true)
+      .map((doc) => doc.id)
+  );
+
+  const bumps = [];
   bumpsSnap.forEach((doc) => {
+    if (excludedRideIds.has(doc.ref.parent.parent.id)) return;
     const bump = doc.data();
     if (typeof bump.latitude !== "number" || typeof bump.longitude !== "number") return;
     bumps.push({
@@ -424,10 +534,244 @@ function renderHeatmap(bumpsSnap) {
         typeof bump.headingDegrees === "number" ? bump.headingDegrees : null,
     });
   });
+  return bumps;
+}
+
+let allBumps = []; // full parsed set (post-exclusion, pre-filter) --
+                    // populated once by loadData(), re-filtered by
+                    // applyMapFilters() below on every filter change.
+
+// The bump map only ever shows where a BUMP happened -- it has no idea
+// where a ride happened with zero bumps, because BumpWatch only ever
+// records a lat/lng at the moment of a bump, never a continuous track of
+// the ride itself (see RideManager.recordBump on both watch apps). That
+// means an empty patch of map is genuinely ambiguous: it could be a
+// smooth, well-ridden street, or it could be a street nobody has ridden
+// in the selected window at all -- the data looks identical either way.
+//
+// This doesn't fix that ambiguity (fixing it for real needs the watch
+// apps to log a periodic route track, not just bump events -- a real
+// project, not a map tweak). What it DOES do is give a citywide signal a
+// viewer can sanity-check against: how many rides were even recorded in
+// the selected window. Zero rides recorded anywhere in range is a strong
+// hint that "no bumps shown" means "no data," not "no bumps." It can't
+// tell you that for one specific quiet street with rides elsewhere in the
+// same window, though -- see the caveat text in index.html next to the
+// filter controls.
+function parseAllRides(ridesSnap) {
+  const rides = [];
+  ridesSnap.forEach((doc) => {
+    const data = doc.data();
+    if (data.excludedFromScoring === true) return; // same override as bumps
+    const startMs = typeof data.startTime?.toDate === "function" ? data.startTime.toDate().getTime() : null;
+    if (startMs === null) return;
+    // routePoints (see functions/index.js's submitRide) already had its
+    // privacy trim applied server-side before this ever reached Firestore
+    // -- nothing further to do with it here except read it.
+    const routePoints = Array.isArray(data.routePoints)
+      ? data.routePoints.filter(
+          (p) => p && typeof p.latitude === "number" && typeof p.longitude === "number"
+        )
+      : [];
+    rides.push({ id: doc.id, startMs, routePoints });
+  });
+  return rides;
+}
+
+let allRides = []; // populated once by loadData(), alongside allBumps.
+
+function ridesWithinRange(fromMs, toMs) {
+  if (fromMs === null && toMs === null) return allRides;
+  return allRides.filter((ride) => {
+    if (fromMs !== null && ride.startMs < fromMs) return false;
+    if (toMs !== null && ride.startMs > toMs) return false;
+    return true;
+  });
+}
+
+function countRidesInRange(fromMs, toMs) {
+  return ridesWithinRange(fromMs, toMs).length;
+}
+
+// ---------------------------------------------------------------------------
+// Map filters -- date range and severity
+// ---------------------------------------------------------------------------
+// Date range lets a visitor (e.g. a city official wanting to show
+// before/after repave progress) narrow the map to a specific window
+// instead of the default "last 12 months." Presets cover the common
+// cases; "Custom range" reveals two plain date inputs for anything else,
+// including picking an OLDER window to see what a street used to look
+// like.
+//
+// Severity is deliberately NOT fixed g-value buckets ("0.5g+", "1.0g+")
+// -- same reasoning as intensityCeiling() above: BumpDetector.thresholdG
+// on the Watch app is still being tuned, so a hardcoded number here would
+// either filter out nothing (sits below the detection floor) or go stale
+// the next time that threshold changes. Percentile-relative options
+// ("worst 10%") stay meaningful no matter where the floor sits, and are
+// computed fresh from whatever's actually in the selected date range --
+// see resolveSeverityThreshold() below.
+
+const rangePresetEl = document.getElementById("mapRangePreset");
+const customRangeEl = document.getElementById("mapCustomRange");
+const dateFromEl = document.getElementById("mapDateFrom");
+const dateToEl = document.getElementById("mapDateTo");
+const rangeApplyBtn = document.getElementById("mapRangeApply");
+const rangeSummaryEl = document.getElementById("mapFilterSummary");
+const coverageToggleEl = document.getElementById("mapCoverageToggle");
+const severityFilterEl = document.getElementById("mapSeverityFilter");
+
+// On by default (see the ride-coverage scoping doc) -- this is the fix for
+// the exact ambiguity a quiet, unridden street shares with a quiet, smooth
+// one, so it stays visible unless someone deliberately turns it off.
+let coverageEnabled = true;
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10); // yyyy-mm-dd, what <input type=date> wants
+}
+
+// Resolves the active preset (or the custom inputs) to a concrete
+// [fromMs, toMs] window. "all" and an empty custom side are unbounded
+// (null), so a bump with no usable timestamp -- old data predating the
+// field, see the isWithinRecencyWindow comment in topStretchesCore.js --
+// is only ever shown under "All time," never inside a specific window we
+// can't actually confirm it falls in.
+function resolveRange() {
+  const preset = rangePresetEl.value;
+  const now = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  if (preset === "custom") {
+    const fromMs = dateFromEl.value ? new Date(`${dateFromEl.value}T00:00:00`).getTime() : null;
+    const toMs = dateToEl.value ? new Date(`${dateToEl.value}T23:59:59.999`).getTime() : null;
+    return { fromMs, toMs };
+  }
+  if (preset === "all") return { fromMs: null, toMs: null };
+
+  const days = { "90d": 90, "6m": 182, "12m": 365 }[preset] ?? 365;
+  return { fromMs: now - days * DAY_MS, toMs: null };
+}
+
+function initMapFilters() {
+  const today = new Date();
+  const twelveMonthsAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+  dateFromEl.value = isoDate(twelveMonthsAgo);
+  dateToEl.value = isoDate(today);
+
+  rangePresetEl.value = DEFAULT_RANGE_PRESET;
+  rangePresetEl.addEventListener("change", () => {
+    customRangeEl.hidden = rangePresetEl.value !== "custom";
+    if (rangePresetEl.value !== "custom") applyMapFilters({ fitView: true });
+  });
+  rangeApplyBtn.addEventListener("click", () => applyMapFilters({ fitView: true }));
+
+  severityFilterEl.value = "all";
+  // fitView: false, unlike the date-range handlers above -- re-narrowing
+  // to a severity tier shouldn't yank the view to wherever those bumps
+  // happen to be. A visitor picking "Worst 5%" is filtering what's
+  // already on screen, not asking to be flown somewhere else.
+  severityFilterEl.addEventListener("change", () => applyMapFilters({ fitView: false }));
+
+  coverageToggleEl.checked = coverageEnabled;
+  coverageToggleEl.addEventListener("change", () => {
+    coverageEnabled = coverageToggleEl.checked;
+    updateLayerForZoom(); // just a visibility flip -- the layer itself doesn't need rebuilding
+  });
+}
+
+// "Above average" -> the mean magnitude of whatever's in the date-filtered
+// set; "worst 10%/5%" -> that set's own 90th/95th percentile, same
+// percentile-of-what's-currently-shown approach as intensityCeiling()
+// above. Scoped to dateFiltered (not the full allBumps) so picking "worst
+// 10%" means worst 10% of what the date range actually shows, not skewed
+// by bumps outside it.
+function resolveSeverityThreshold(dateFiltered) {
+  const mode = severityFilterEl.value;
+  if (mode === "all" || dateFiltered.length === 0) return 0;
+
+  const magnitudes = dateFiltered.map((b) => b.magnitude).sort((a, b) => a - b);
+  if (mode === "above-avg") {
+    return magnitudes.reduce((sum, m) => sum + m, 0) / magnitudes.length;
+  }
+  const percentile = mode === "worst5" ? 0.95 : 0.9; // "worst10" is the fallback
+  const index = Math.floor(percentile * (magnitudes.length - 1));
+  return magnitudes[index];
+}
+
+const SEVERITY_SUMMARY_LABELS = {
+  all: "",
+  "above-avg": " above average severity",
+  worst10: " in the worst 10% by severity",
+  worst5: " in the worst 5% by severity",
+};
+
+function applyMapFilters({ fitView }) {
+  const { fromMs, toMs } = resolveRange();
+
+  const dateFiltered = allBumps.filter((bump) => {
+    if (fromMs === null && toMs === null) return true; // "All time"
+    const ts = bump.timestamp instanceof Date && !isNaN(bump.timestamp) ? bump.timestamp.getTime() : null;
+    if (ts === null) return false; // can't confirm it falls in a bounded window
+    if (fromMs !== null && ts < fromMs) return false;
+    if (toMs !== null && ts > toMs) return false;
+    return true;
+  });
+
+  const severityThreshold = resolveSeverityThreshold(dateFiltered);
+  const filtered = dateFiltered.filter((bump) => bump.magnitude >= severityThreshold);
+
+  const ridesInRange = ridesWithinRange(fromMs, toMs);
+
+  renderFilterSummary(filtered, ridesInRange.length);
+  renderBumpLayers(filtered, { fitView, rideCount: ridesInRange.length });
+  renderCoverageLayer(ridesInRange);
+}
+
+function renderFilterSummary(filtered, rideCount) {
+  const rideWord = rideCount === 1 ? "ride" : "rides";
+  if (rideCount === 0) {
+    rangeSummaryEl.textContent = "No rides recorded in this range at all — an empty map means no data, not smooth roads.";
+    return;
+  }
+  const severityLabel = SEVERITY_SUMMARY_LABELS[severityFilterEl.value] ?? "";
+  if (filtered.length === 0) {
+    rangeSummaryEl.textContent = `${formatCount(rideCount)} ${rideWord} recorded, 0 bumps${severityLabel} in this range.`;
+    return;
+  }
+  const worst = Math.max(...filtered.map((b) => b.magnitude));
+  rangeSummaryEl.textContent =
+    `${formatCount(filtered.length)} bumps${severityLabel} across ${formatCount(rideCount)} ${rideWord} in this range · worst ${worst.toFixed(2)}g`;
+}
+
+// Builds (or rebuilds) the heat/markers/city-dot layers from a bump list --
+// called both on initial load and every time a map filter changes, so
+// any previously-attached layers are torn down first rather than piling up.
+function renderBumpLayers(bumps, { fitView, rideCount }) {
+  for (const layer of [heatLayer, markersLayer, cityDotsLayer]) {
+    if (layer && map.hasLayer(layer)) map.removeLayer(layer);
+  }
+  heatLayer = null;
+  markersLayer = null;
+  cityDotsLayer = null;
 
   const emptyState = document.getElementById("mapEmpty");
 
   if (bumps.length === 0) {
+    // Same "no data" vs "no bumps" distinction as renderFilterSummary above
+    // -- but here it's the message sitting directly on the empty map, so a
+    // viewer who skipped the smaller filter-summary text still sees it.
+    if (allRides.length === 0) {
+      // Nothing has ever been recorded, in any range -- the site's
+      // original bootstrap message, not the date-filter-specific one.
+      emptyState.textContent =
+        "No bumps recorded yet — be the first to ride and put your street on the map.";
+    } else if (rideCount === 0) {
+      emptyState.textContent =
+        "No rides recorded in this date range — this means no data, not necessarily smooth roads. Try a wider range.";
+    } else {
+      emptyState.textContent =
+        `${formatCount(rideCount)} ride${rideCount === 1 ? "" : "s"} recorded in this range with zero bumps logged — nice and smooth.`;
+    }
     emptyState.hidden = false;
     return;
   }
@@ -455,9 +799,14 @@ function renderHeatmap(bumpsSnap) {
   // (e.g. a geolocation fix that already zoomed in past the switch point).
   updateLayerForZoom();
 
-  // Don't fight a successful geolocation fix -- only fall back to fitting
-  // the data's bounds if we're not already centered on the visitor.
-  if (!userLocated) {
+  // Don't fight a successful geolocation fix on the very first load --
+  // fitView is false there when it succeeded. The date-range handlers pass
+  // fitView: true on every later call, since re-framing around whatever
+  // window was just picked is the whole point of changing it. The
+  // severity handler passes false instead -- narrowing to a severity tier
+  // filters what's already in view rather than asking to go look
+  // somewhere else, so the map should hold its position.
+  if (fitView) {
     if (bounds.length === 1) {
       map.setView(bounds[0], 14);
     } else {
@@ -468,6 +817,81 @@ function renderHeatmap(bumpsSnap) {
   // setView/fitBounds above may or may not actually change the zoom level
   // (and therefore may or may not fire "zoomend"), so double check once
   // more after the view settles.
+  updateLayerForZoom();
+}
+
+// ---------------------------------------------------------------------------
+// Ride coverage layer
+// ---------------------------------------------------------------------------
+// Shows which streets have actually been RIDDEN, not just where a bump
+// happened -- see functions/index.js's routePoints and the ride-coverage
+// scoping doc this implements.
+//
+// Draws each ride's own (already-trimmed) route as its own polyline,
+// rather than aggregating into a grid first. An earlier version connected
+// adjacent cells of a 40m grid instead, specifically so the layer read as
+// "this street has coverage" rather than "this is rider X's GPS trace" --
+// but in practice, any street with GPS wobble or more than one ride
+// touching it produced a criss-crossing web of diagonals between cells
+// instead of a clean line (the grid has no notion of which neighbor
+// continues the route vs. which is just an adjacent, unrelated pass), so
+// it read as noisier and less accurate than the real thing. Privacy here
+// was never actually resting on the grid aggregation anyway -- it rests
+// entirely on the 150m endpoint trim already applied server-side (see
+// ROUTE_ENDPOINT_TRIM_METERS in functions/index.js), which applies just
+// the same to a raw per-ride line as it did to the grid built from those
+// same trimmed points. So: real route shape, same underlying privacy
+// guarantee.
+
+// Fresh (ridden very recently) toward faded (ridden toward the edge of a
+// year ago or beyond). Purple on purpose -- it used to reuse the site's
+// "protected path" teal (--lane-track), but that read as too close to the
+// teal/cyan bike-lane infrastructure lines and painted-lane color, making
+// it hard to tell "ridden" apart from "lane type" at a glance. Purple isn't
+// used anywhere else on the map (bump severity is the yellow/orange/red
+// heat scale, lanes are teal/cyan), so it reads as its own distinct layer.
+// Keep this in sync with --coverage-ridden in styles.css, used for the
+// matching legend swatch.
+const COVERAGE_GRADIENT = { 0.0: "#2a1f47", 1.0: "#b18cff" };
+const COVERAGE_STOPS = Object.entries(COVERAGE_GRADIENT)
+  .map(([stop, hex]) => ({ stop: parseFloat(stop), rgb: hexToRgb(hex) }))
+  .sort((a, b) => a.stop - b.stop);
+
+function coverageFreshnessToColor(freshness) {
+  return interpolateStops(COVERAGE_STOPS, freshness);
+}
+
+function msFreshness(ms) {
+  const ageDays = (Date.now() - ms) / (24 * 60 * 60 * 1000);
+  return Math.max(0, Math.min(1, 1 - ageDays / 365));
+}
+
+// A ride with 0 or 1 points (everything trimmed away, or a GPS dropout)
+// can't form a line -- skip it rather than let Leaflet choke on it.
+function buildCoverageLine(ride) {
+  if (ride.routePoints.length < 2) return null;
+
+  const color = coverageFreshnessToColor(msFreshness(ride.startMs));
+  const latlngs = ride.routePoints.map((p) => [p.latitude, p.longitude]);
+  const line = L.polyline(latlngs, { color, weight: 3, opacity: 0.75, lineCap: "round", lineJoin: "round" });
+
+  const dateLabel = new Date(ride.startMs).toLocaleDateString(undefined, { dateStyle: "medium" });
+  line.bindPopup(`
+    <div class="bump-popup">
+      <p class="bump-popup-mag" style="color: ${color}">Ridden</p>
+      <p class="bump-popup-row">${dateLabel}</p>
+    </div>
+  `);
+  return line;
+}
+
+// Rebuilds the coverage layer for a given (already date-filtered) ride
+// list -- called from applyMapFilters alongside the bump layers, so both
+// always describe the same window.
+function renderCoverageLayer(rides) {
+  if (coverageLayer && map.hasLayer(coverageLayer)) map.removeLayer(coverageLayer);
+
+  coverageLayer = L.layerGroup(rides.map(buildCoverageLine).filter(Boolean));
   updateLayerForZoom();
 }
 
@@ -522,20 +946,120 @@ function flyToStretch(stretch, itemEl) {
 
 function buildStretchItemHtml(stretch, rank) {
   return `
-    <span class="stretch-rank">${rank}</span>
-    <span class="stretch-info">
-      <span class="stretch-name">${stretch.name}</span>
-      <span class="stretch-meta">${formatCount(stretch.bumpCount)} bumps recorded &middot; avg severity ${stretch.avgSeverityG.toFixed(2)}g</span>
-    </span>
+    <button type="button" class="stretch-main">
+      <span class="stretch-rank">${rank}</span>
+      <span class="stretch-info">
+        <span class="stretch-name">${stretch.name}</span>
+        <span class="stretch-meta">${formatCount(stretch.bumpCount)} bumps recorded &middot; avg severity ${stretch.avgSeverityG.toFixed(2)}g</span>
+      </span>
+    </button>
+    <button type="button" class="stretch-share" aria-label="Share this stretch" title="Share">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12" />
+        <path d="M7 8l5-5 5 5" />
+        <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+      </svg>
+    </button>
   `;
 }
 
-// Two independently-computed top 5s from generate-top-stretches.mjs --
+// ---------------------------------------------------------------------------
+// Sharing a single stretch (Facebook/X card + deep link back to it)
+// ---------------------------------------------------------------------------
+// The actual per-stretch preview card (custom image, "#3 Worst Bike Lane in
+// <city>" title) is generated server-side -- see functions/shareCard.js's
+// header comment for why that has to be a real server response rather than
+// something this client-rendered page can produce on its own. Everything
+// here just builds the URL to that endpoint and hands it to the share UI.
+
+// Must match functions/shareCard.js's metroSlug EXACTLY -- this is how a
+// share link built here gets resolved back to the right metro server-side,
+// and how a `?highlight=` link (see applyHighlightFromUrl below) gets
+// resolved back to the right metro here. No shared module between this
+// bundle and the Functions runtime, so it's duplicated by hand -- change
+// one, change both.
+function metroSlug(name) {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip combining accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function buildShareUrl(metro, mode, rank) {
+  return `${window.location.origin}/share/${metroSlug(metro.name)}/${mode}/${rank}`;
+}
+
+let activeSharePopover = null;
+
+function closeSharePopover() {
+  if (!activeSharePopover) return;
+  activeSharePopover.remove();
+  activeSharePopover = null;
+  document.removeEventListener("click", handleDocumentClickForSharePopover);
+}
+
+function handleDocumentClickForSharePopover(event) {
+  if (activeSharePopover && !activeSharePopover.contains(event.target)) {
+    closeSharePopover();
+  }
+}
+
+// Desktop fallback for browsers without the Web Share API (most of them,
+// still, outside mobile Safari/Chrome) -- a tiny anchored menu with the
+// two platforms actually asked for, each just a plain share-intent link
+// FB/X reads the target URL's own <meta> tags to build the FB/X card
+// itself, so there's nothing more to pass it than the URL.
+function openSharePopover(anchorEl, { url, title, text }) {
+  closeSharePopover();
+
+  const popover = document.createElement("div");
+  popover.className = "share-popover";
+
+  const tweetText = `${title} \u2014 ${text}`;
+  const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(url)}`;
+  const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+
+  popover.innerHTML = `
+    <a href="${xUrl}" target="_blank" rel="noopener noreferrer" class="share-popover-link">Share on X</a>
+    <a href="${fbUrl}" target="_blank" rel="noopener noreferrer" class="share-popover-link">Share on Facebook</a>
+  `;
+
+  document.body.appendChild(popover);
+  const rect = anchorEl.getBoundingClientRect();
+  popover.style.top = `${window.scrollY + rect.bottom + 6}px`;
+  popover.style.left = `${window.scrollX + rect.left}px`;
+
+  activeSharePopover = popover;
+  // Deferred so the same click that opened this popover doesn't
+  // immediately close it again via the listener below.
+  setTimeout(() => document.addEventListener("click", handleDocumentClickForSharePopover), 0);
+}
+
+function shareStretch(metro, mode, rank, stretch, anchorEl) {
+  const url = buildShareUrl(metro, mode, rank);
+  const title = `#${rank} Worst Bike Lane in ${metro.name}`;
+  const text = `${stretch.name} \u2014 ${formatCount(stretch.bumpCount)} bumps recorded on BumpWatch.`;
+
+  // Mobile's native share sheet (Messages, Instagram, FB, X, all of it)
+  // when it's available -- the popover below is only a fallback for the
+  // desktop browsers that don't implement it.
+  if (navigator.share) {
+    navigator.share({ title, text, url }).catch(() => {}); // cancelling the share sheet rejects; nothing to handle
+    return;
+  }
+
+  openSharePopover(anchorEl, { url, title, text });
+}
+
+// Two independently-computed top 10s from generate-top-stretches.mjs --
 // "weighted" ranks by speed-weighted score (same jolt at a lower speed
 // counts more), "unweighted" ranks by plain total severity. These can
-// genuinely differ in WHICH 5 stretches show up, not just their order --
+// genuinely differ in WHICH stretches show up, not just their order --
 // see the script's own comment on why both are worth showing rather than
-// just re-sorting one fixed list of 5.
+// just re-sorting one fixed list.
 const RANKING_NOTES = {
   weighted:
     "Weighted so a bump hit at a lower speed counts for more -- a hint the surface itself is the problem, not just speed.",
@@ -543,14 +1067,23 @@ const RANKING_NOTES = {
 };
 
 // generate-top-stretches.mjs now groups bumps into rough metro areas
-// FIRST and ranks a top 5 independently within each one (see that script's
-// header comment for why) -- so top-stretches.json holds a `metros` array,
-// each with its own weighted/unweighted top 5, rather than one flat list.
-// The ranking-mode toggle still applies globally: switching to "raw
-// severity" re-renders every metro's section in that mode at once, rather
-// than being a per-metro control.
+// FIRST and ranks a top 10 independently within each one (see that
+// script's header comment for why) -- so top-stretches.json holds a
+// `metros` array, each with its own weighted/unweighted top 10, rather
+// than one flat list. The ranking-mode toggle still applies globally:
+// switching to "raw severity" re-renders every metro's section in that
+// mode at once, rather than being a per-metro control.
 let metroRankings = []; // [{ name, lat, lng, weighted: [...], unweighted: [...] }, ...]
 let activeRankingMode = "weighted";
+
+// Only the first 5 of each metro's (up to 10) stretches show by default --
+// that's the punchy, shareable "top 5" list this site is built around.
+// "See next 5" reveals the rest for whichever metro was clicked, tracked
+// here by metro slug so it survives a renderStretchList() rebuild (the
+// weighted/unweighted toggle re-renders everything from scratch) instead
+// of silently re-collapsing whatever a visitor had opened.
+const DEFAULT_STRETCH_COUNT = 5;
+const expandedMetroSlugs = new Set();
 
 function renderStretchList(metros) {
   const container = document.getElementById("stretchesList");
@@ -560,6 +1093,10 @@ function renderStretchList(metros) {
     const stretches = metro[activeRankingMode] ?? [];
     if (stretches.length === 0) continue; // shouldn't happen in practice -- processMetro only emits a metro once it has a nonempty top 5 in both modes -- but skip cleanly rather than rendering an empty section if it ever does
 
+    const slug = metroSlug(metro.name);
+    const isExpanded = expandedMetroSlugs.has(slug);
+    const visibleStretches = isExpanded ? stretches : stretches.slice(0, DEFAULT_STRETCH_COUNT);
+
     const heading = document.createElement("h3");
     heading.className = "stretch-metro-heading";
     heading.textContent = metro.name;
@@ -568,18 +1105,55 @@ function renderStretchList(metros) {
     const list = document.createElement("ol");
     list.className = "stretches-list";
 
-    stretches.forEach((stretch, index) => {
+    // visibleStretches is either the full array or a slice(0, N) of it, so
+    // its index always matches the stretch's real position in `stretches`
+    // -- rank stays correct (never resets to 1) whether this is showing 5
+    // or all 10.
+    visibleStretches.forEach((stretch, index) => {
+      const rank = index + 1;
       const li = document.createElement("li");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "stretch-item";
-      button.innerHTML = buildStretchItemHtml(stretch, index + 1);
-      button.addEventListener("click", () => flyToStretch(stretch, button));
-      li.appendChild(button);
+      const item = document.createElement("div");
+      item.className = "stretch-item";
+      item.innerHTML = buildStretchItemHtml(stretch, rank);
+      // Lets a `?highlight=` deep link (see applyHighlightFromUrl) find
+      // this exact item in the DOM after rendering, without needing to
+      // re-derive it from stretch content that could theoretically repeat.
+      item.dataset.metroSlug = slug;
+      item.dataset.rank = String(rank);
+
+      item.querySelector(".stretch-main").addEventListener("click", () => flyToStretch(stretch, item));
+
+      const shareBtn = item.querySelector(".stretch-share");
+      shareBtn.addEventListener("click", (event) => {
+        // Without this, the click bubbles up into nothing bad right now
+        // (the share button isn't nested inside .stretch-main), but it's
+        // cheap insurance against the two ever needing to overlap later,
+        // and it's the same guard flyToStretch's own layout depends on
+        // conceptually staying a separate, non-nested control.
+        event.stopPropagation();
+        shareStretch(metro, activeRankingMode, rank, stretch, shareBtn);
+      });
+
+      li.appendChild(item);
       list.appendChild(li);
     });
 
     container.appendChild(list);
+
+    if (stretches.length > DEFAULT_STRETCH_COUNT) {
+      const expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "stretch-expand-btn";
+      expandBtn.textContent = isExpanded
+        ? "Show fewer"
+        : `See next ${stretches.length - DEFAULT_STRETCH_COUNT} stretches`;
+      expandBtn.addEventListener("click", () => {
+        if (isExpanded) expandedMetroSlugs.delete(slug);
+        else expandedMetroSlugs.add(slug);
+        renderStretchList(metroRankings);
+      });
+      container.appendChild(expandBtn);
+    }
   }
 }
 
@@ -617,6 +1191,48 @@ async function loadTopStretches() {
   setRankingMode(activeRankingMode);
 
   document.getElementById("priority-stretches").hidden = false;
+
+  applyHighlightFromUrl();
+}
+
+// A share link (see shareStretch above) sends a real visitor's browser to
+// functions/shareCard.js's redirect target: this same site with
+// `?highlight=<metroSlug>:<mode>:<rank>` in the query string. This is what
+// turns that back into the actual highlighted-box behavior a click in the
+// list already gives you -- same flyToStretch, just triggered by a URL
+// instead of a click.
+//
+// A link can point at a metro/rank that no longer places in the top 5
+// after a nightly recompute (see shareCard.js's own comment on this same
+// tradeoff server-side) -- there's no error state for that here, the page
+// just loads as a completely normal visit with nothing highlighted.
+function applyHighlightFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("highlight");
+  if (!raw) return;
+
+  const [slug, mode, rankStr] = raw.split(":");
+  const rank = Number(rankStr);
+  if (!slug || (mode !== "weighted" && mode !== "unweighted") || !Number.isInteger(rank) || rank < 1) {
+    return;
+  }
+
+  const metro = metroRankings.find((m) => metroSlug(m.name) === slug);
+  const stretch = metro?.[mode]?.[rank - 1];
+  if (!metro || !stretch) return;
+
+  if (mode !== activeRankingMode) setRankingMode(mode);
+
+  // setRankingMode (if it just ran) rebuilds #stretchesList synchronously,
+  // but flyToStretch also scrolls the page -- deferring one frame keeps
+  // that scroll from racing the browser's own initial-load scroll
+  // restoration on some browsers.
+  requestAnimationFrame(() => {
+    const item = document.querySelector(
+      `.stretch-item[data-metro-slug="${slug}"][data-rank="${rank}"]`
+    );
+    if (item) flyToStretch(stretch, item);
+  });
 }
 
 loadTopStretches().catch((error) => {
@@ -634,13 +1250,16 @@ loadTopStretches().catch((error) => {
 // top-stretches.json: lane geometry barely changes day to day, so a script
 // rerun by hand beats hitting a shared free API on every page load.
 
-// Cool teal family, deliberately apart from the warm heat ramp (bumps) and
-// the yellow stretch highlight -- reads as "infrastructure" rather than
-// "problem" at a glance. Weight/dash also step down with actual physical
-// protection: a solid track is the strongest line, a sharrow the faintest.
+// Cool family, deliberately apart from the warm heat ramp (bumps) and the
+// yellow stretch highlight -- reads as "infrastructure" rather than
+// "problem" at a glance. track/shared stay teal-ish; lane is a deeper,
+// more saturated blue (was a lighter cyan, #35b0c7) so "painted lane" is
+// visually distinct from "protected path" instead of just a paler version
+// of it. Weight/dash also step down with actual physical protection: a
+// solid track is the strongest line, a sharrow the faintest.
 const BIKE_LANE_STYLES = {
   track: { color: "#3ddc97", weight: 3, opacity: 0.85 },
-  lane: { color: "#35b0c7", weight: 2.5, opacity: 0.75 },
+  lane: { color: "#2563eb", weight: 2.5, opacity: 0.75 },
   shared: { color: "#6b8f96", weight: 2, opacity: 0.6, dashArray: "2, 6" },
 };
 const BIKE_LANE_LABELS = {
