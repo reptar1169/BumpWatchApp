@@ -8,12 +8,35 @@
   "firestore": {
     "rules": "firestore/firestore.rules"
   },
-  "hosting": {
-    "public": "web/bikelanebumps-site",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
-  }
+  "hosting": [
+    {
+      "public": "web/bikelanebumps-site",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/share/**",
+          "function": {
+            "functionId": "shareCard",
+            "region": "us-east1"
+          }
+        }
+      ],
+      "target": "main"
+    },
+    {
+      "target": "apex-redirect",
+      "public": "web/redirect-apex",
+      "redirects": [
+        {
+          "source": "/**",
+          "destination": "https://www.bikelanebumps.org/:0",
+          "type": 301
+        }
+      ]
+    }
+  ]
 }

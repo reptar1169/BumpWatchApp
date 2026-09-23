@@ -3,6 +3,17 @@
     "bumpwatch": "bikelanebumps",
     "default": "bikelanebumps"
   },
-  "targets": {},
+  "targets": {
+    "bikelanebumps": {
+      "hosting": {
+        "main": [
+          "bikelanebumps"
+        ],
+        "apex-redirect": [
+          "bikelanebumps-apex-redirect"
+        ]
+      }
+    }
+  },
   "etags": {}
 }
