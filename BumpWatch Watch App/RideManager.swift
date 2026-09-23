@@ -33,6 +33,26 @@ final class RideManager: NSObject, ObservableObject {
     /// but can take longer if the sensor hasn't acquired a signal yet (e.g.
     /// a loose band).
     @Published var currentHeartRateBPM: Double?
+    /// Live cumulative distance for the in-progress ride, in meters, from
+    /// HealthKit's own running total for the workout (see
+    /// workoutBuilder(_:didCollectDataOf:) below). Nil until the first
+    /// distance sample arrives.
+    @Published var currentDistanceMeters: Double?
+    /// Live cumulative active energy burned (calories) for the in-progress
+    /// ride, in kcal -- same source/reasoning as currentDistanceMeters.
+    @Published var currentActiveEnergyKcal: Double?
+    /// Live cumulative elevation gain for the in-progress ride, in meters.
+    /// Unlike heart rate/distance/energy, HealthKit doesn't hand this to
+    /// third-party apps as a collectible live sample -- the "Elevation
+    /// Gain" Apple Fitness shows after a ride is computed internally by
+    /// the system and only surfaces as read-only metadata on someone
+    /// else's saved workout, not something HKLiveWorkoutDataSource streams
+    /// to us. So this is computed directly from the Watch's own barometric
+    /// altimeter instead (see startAltimeterUpdates()), the same approach
+    /// third-party fitness apps use. Defaults to 0 (not nil) since a ride
+    /// genuinely starts at zero gain, unlike the others above which have
+    /// no meaningful "zero" before a first sample arrives.
+    @Published var elevationGainMeters: Double = 0
     @Published var lastError: String?
 
     private let healthStore = HKHealthStore()
@@ -42,6 +62,34 @@ final class RideManager: NSObject, ObservableObject {
     private let motionManager = CMMotionManager()
     private let locationTracker = LocationTracker()
     private let bumpDetector = BumpDetector()
+    private let altimeter = CMAltimeter()
+    /// Previous relative-altitude reading, to diff against the next one --
+    /// see startAltimeterUpdates(). Reset to nil each time altimeter
+    /// updates (re)start so a fresh baseline is established rather than
+    /// diffing against a stale reading from before a pause.
+    private var lastRelativeAltitudeMeters: Double?
+    /// Barometric noise floor -- CMAltimeter's relative-altitude readings
+    /// jitter by a few centimeters even standing still, so summing every
+    /// positive delta unfiltered would make elevationGainMeters creep up
+    /// steadily even on a ride with zero real elevation change. Only a
+    /// delta past this threshold counts as actual climbing.
+    private static let elevationNoiseThresholdMeters = 0.15
+
+    /// Route points are sampled by distance, not time -- dense through
+    /// slow, turny blocks, sparse on a long straight stretch, quiet at a
+    /// red light. 20m is about 4-6 points per typical city block: enough
+    /// for the map to read as a real street without a laser survey.
+    private static let routePointMinSpacingMeters: CLLocationDistance = 20
+    /// Mirrors the server-side MAX_ROUTE_POINTS_PER_RIDE cap in
+    /// functions/index.js -- keeps a pathological all-day ride's payload
+    /// bounded. At 20m spacing this is ~60km of riding before sampling
+    /// simply stops for the rest of the ride, well past a normal commute.
+    private static let maxRoutePointsPerRide = 3000
+    /// Last fix a route point was recorded from, so maybeRecordRoutePoint
+    /// can measure distance since it. Reset to nil at the start of every
+    /// ride (see beginRide) so spacing is judged fresh each time, never
+    /// against a previous ride's last point.
+    private var lastRoutePointLocation: CLLocation?
 
     private var currentRide: RideRecord?
     /// Ride-long average/max heart rate, refreshed from HealthKit's own
@@ -65,6 +113,11 @@ final class RideManager: NSObject, ObservableObject {
                 self?.lastError = "Location access denied — bumps won't be located. Enable it in the Watch's Settings app."
             }
         }
+        locationTracker.onLocationUpdate = { [weak self] location in
+            Task { @MainActor in
+                self?.maybeRecordRoutePoint(location)
+            }
+        }
     }
 
     // MARK: - Public controls
@@ -75,11 +128,25 @@ final class RideManager: NSObject, ObservableObject {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         let share: Set = [HKObjectType.workoutType()]
         var read: Set<HKObjectType> = [HKObjectType.workoutType()]
-        // Heart rate is read-only here -- we never write samples ourselves,
-        // just read what HealthKit collects automatically during the
-        // workout session (see HKLiveWorkoutDataSource in beginRide()).
+        // All read-only here -- we never write samples ourselves, just read
+        // what HealthKit collects automatically during the workout session
+        // (see HKLiveWorkoutDataSource in beginRide()). Heart rate, active
+        // energy (calories), and distance are all part of the *default*
+        // auto-collected set for an outdoor cycling HKWorkoutConfiguration
+        // -- see the comment on workoutBuilder(_:didCollectDataOf:) below --
+        // but HealthKit still won't collect (or save into the finished
+        // HKWorkout that Fitness reads) a type this app was never even
+        // authorized for. Without these two, only heart rate authorization
+        // existed, which is exactly why Fitness was only ever showing time
+        // + heart rate for a ride and nothing else.
         if let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate) {
             read.insert(heartRateType)
+        }
+        if let energyType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) {
+            read.insert(energyType)
+        }
+        if let distanceType = HKObjectType.quantityType(forIdentifier: .distanceCycling) {
+            read.insert(distanceType)
         }
         healthStore.requestAuthorization(toShare: share, read: read) { [weak self] success, error in
             Task { @MainActor in
@@ -167,6 +234,7 @@ final class RideManager: NSObject, ObservableObject {
         let start = Date()
         rideStartDate = start
         currentRide = RideRecord(startTime: start)
+        lastRoutePointLocation = nil
 
         session.startActivity(with: start)
         builder.beginCollection(withStart: start) { [weak self] _, error in
@@ -182,6 +250,7 @@ final class RideManager: NSObject, ObservableObject {
         bumpDetector.reset()
         locationTracker.start()
         startMotionUpdates()
+        startAltimeterUpdates()
         startTimer()
 
         isStarting = false
@@ -193,6 +262,9 @@ final class RideManager: NSObject, ObservableObject {
         currentHeartRateBPM = nil
         rideAverageHeartRateBPM = nil
         rideMaxHeartRateBPM = nil
+        currentDistanceMeters = nil
+        currentActiveEnergyKcal = nil
+        elevationGainMeters = 0
         lastError = nil
     }
 
@@ -207,6 +279,7 @@ final class RideManager: NSObject, ObservableObject {
         pauseStartDate = Date()
 
         stopMotionUpdates()
+        stopAltimeterUpdates()
         timer?.invalidate()
         timer = nil
         session?.pause()
@@ -226,6 +299,7 @@ final class RideManager: NSObject, ObservableObject {
         isPaused = false
 
         startMotionUpdates()
+        startAltimeterUpdates()
         startTimer()
         session?.resume()
     }
@@ -258,6 +332,7 @@ final class RideManager: NSObject, ObservableObject {
         guard isRecording else { return }
 
         stopMotionUpdates()
+        stopAltimeterUpdates()
         locationTracker.stop()
         timer?.invalidate()
         timer = nil
@@ -308,6 +383,33 @@ final class RideManager: NSObject, ObservableObject {
         motionManager.stopDeviceMotionUpdates()
     }
 
+    // MARK: - Altimeter (elevation gain)
+
+    /// Starts (or restarts) barometric relative-altitude updates. Called
+    /// fresh on both ride start and resume-from-pause so
+    /// lastRelativeAltitudeMeters always begins from a clean baseline --
+    /// CMAltimeter's "relative altitude" is relative to whenever updates
+    /// began, not an absolute reading, so restarting it is exactly how you
+    /// get a new zero point rather than diffing across a pause gap.
+    private func startAltimeterUpdates() {
+        guard CMAltimeter.isRelativeAltitudeAvailable() else { return }
+        lastRelativeAltitudeMeters = nil
+        altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+            guard let self, let data, error == nil else { return }
+            let altitude = data.relativeAltitude.doubleValue
+            defer { self.lastRelativeAltitudeMeters = altitude }
+            guard let last = self.lastRelativeAltitudeMeters else { return }
+            let delta = altitude - last
+            if delta > Self.elevationNoiseThresholdMeters {
+                self.elevationGainMeters += delta
+            }
+        }
+    }
+
+    private func stopAltimeterUpdates() {
+        altimeter.stopRelativeAltitudeUpdates()
+    }
+
     private func handleMotion(_ motion: CMDeviceMotion) {
         let now = Date()
         guard let peakG = bumpDetector.ingest(userAcceleration: motion.userAcceleration, at: now) else { return }
@@ -349,6 +451,31 @@ final class RideManager: NSObject, ObservableObject {
         }
     }
 
+    /// Called on every GPS fix (see the onLocationUpdate wiring in init()),
+    /// completely independent of bump detection -- a ride with zero bumps
+    /// still traces its full route. Only appends a point once the bike has
+    /// moved at least routePointMinSpacingMeters from the last recorded
+    /// one, and stops entirely once maxRoutePointsPerRide is hit rather
+    /// than growing the payload without bound.
+    private func maybeRecordRoutePoint(_ location: CLLocation) {
+        guard var ride = currentRide, let start = rideStartDate else { return }
+        guard ride.routePoints.count < Self.maxRoutePointsPerRide else { return }
+
+        if let last = lastRoutePointLocation, location.distance(from: last) < Self.routePointMinSpacingMeters {
+            return
+        }
+        lastRoutePointLocation = location
+
+        ride.routePoints.append(
+            RoutePoint(
+                rideElapsedSeconds: location.timestamp.timeIntervalSince(start),
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            )
+        )
+        currentRide = ride
+    }
+
     // MARK: - Timer (UI elapsed time)
 
     private func startTimer() {
@@ -378,6 +505,22 @@ final class RideManager: NSObject, ObservableObject {
         if let max = statistics.maximumQuantity()?.doubleValue(for: Self.heartRateUnit) {
             rideMaxHeartRateBPM = max
         }
+    }
+
+    /// Distance is a cumulative type (unlike heart rate's point-in-time
+    /// samples) -- statistics.sumQuantity() is the running total collected
+    /// so far for the whole workout, so (like updateHeartRate above)
+    /// there's nothing to accumulate manually here either.
+    private func updateDistance(from statistics: HKStatistics) {
+        guard let sum = statistics.sumQuantity() else { return }
+        currentDistanceMeters = sum.doubleValue(for: .meter())
+    }
+
+    /// Active energy (calories) is also cumulative -- same reasoning as
+    /// updateDistance above.
+    private func updateActiveEnergy(from statistics: HKStatistics) {
+        guard let sum = statistics.sumQuantity() else { return }
+        currentActiveEnergyKcal = sum.doubleValue(for: .kilocalorie())
     }
 
     // MARK: - Finish
@@ -433,12 +576,20 @@ extension RideManager: HKLiveWorkoutBuilderDelegate {
     /// is needed for it, unlike sample types outside the default set for
     /// the configured activity type.
     nonisolated func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
-        guard let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate),
-              collectedTypes.contains(heartRateType),
-              let statistics = workoutBuilder.statistics(for: heartRateType) else { return }
-
-        Task { @MainActor in
-            self.updateHeartRate(from: statistics)
+        if let heartRateType = HKObjectType.quantityType(forIdentifier: .heartRate),
+           collectedTypes.contains(heartRateType),
+           let statistics = workoutBuilder.statistics(for: heartRateType) {
+            Task { @MainActor in self.updateHeartRate(from: statistics) }
+        }
+        if let distanceType = HKObjectType.quantityType(forIdentifier: .distanceCycling),
+           collectedTypes.contains(distanceType),
+           let statistics = workoutBuilder.statistics(for: distanceType) {
+            Task { @MainActor in self.updateDistance(from: statistics) }
+        }
+        if let energyType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
+           collectedTypes.contains(energyType),
+           let statistics = workoutBuilder.statistics(for: energyType) {
+            Task { @MainActor in self.updateActiveEnergy(from: statistics) }
         }
     }
 

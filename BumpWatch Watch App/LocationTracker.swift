@@ -8,6 +8,13 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private(set) var lastLocation: CLLocation?
     var onAuthorizationDenied: (() -> Void)?
+    /// Fires on every fix, same rate as lastLocation updates -- RideManager
+    /// uses this to sample route points independently of bump detection
+    /// (see RideManager.maybeRecordRoutePoint(_:)). Not throttled here on
+    /// purpose: the distance-based "is this far enough from the last
+    /// recorded point" decision belongs to whoever's building the route,
+    /// not to this thin wrapper.
+    var onLocationUpdate: ((CLLocation) -> Void)?
 
     override init() {
         super.init()
@@ -43,6 +50,7 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let newest = locations.last {
             lastLocation = newest
+            onLocationUpdate?(newest)
         }
     }
 

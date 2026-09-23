@@ -4,6 +4,22 @@ struct ContentView: View {
     @StateObject private var rideManager = RideManager()
 
     var body: some View {
+        // watchOS's native swipe-between-pages convention (the same one
+        // Apple's own Workout app uses for Now Playing / Metrics / Elapsed
+        // Time) -- mainPage is the original single-screen layout, unchanged;
+        // statsPage is the new page this swipes to on the right.
+        TabView {
+            mainPage
+            statsPage
+        }
+        .tabViewStyle(.page(indexDisplayMode: .automatic))
+        .onAppear {
+            rideManager.requestPermissions()
+            UploadService.shared.retryPendingUploads()
+        }
+    }
+
+    private var mainPage: some View {
         VStack(spacing: 8) {
             if rideManager.isRecording {
                 heartRateHeadline
@@ -79,10 +95,52 @@ struct ContentView: View {
             }
         }
         .padding()
-        .onAppear {
-            rideManager.requestPermissions()
-            UploadService.shared.retryPendingUploads()
+    }
+
+    /// The swipe-right page: live distance, calories, and elevation gain
+    /// for the in-progress ride. Shows "--" placeholders (mirroring
+    /// heartRateValueText/bumpCountLine's existing approach) rather than
+    /// hiding the page entirely before a ride starts or before the first
+    /// sample of each type has arrived -- simpler than conditionally
+    /// changing which pages exist, and swiping over to an empty-looking
+    /// page pre-ride is a reasonable way to discover it exists.
+    private var statsPage: some View {
+        VStack(spacing: 14) {
+            statTile(label: "Distance", value: distanceValueText)
+            statTile(label: "Calories", value: calorieValueText)
+            statTile(label: "Elevation", value: elevationValueText)
         }
+        .padding()
+    }
+
+    private func statTile(label: String, value: String) -> some View {
+        VStack(spacing: 0) {
+            Text(value)
+                .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Miles, matching the mph conversion already used for speed elsewhere
+    /// in this project (see UploadService/app.js's popup) rather than
+    /// mixing unit systems across the app.
+    private var distanceValueText: String {
+        guard let meters = rideManager.currentDistanceMeters else { return "-- mi" }
+        return String(format: "%.2f mi", meters * 0.000621371)
+    }
+
+    private var calorieValueText: String {
+        guard let kcal = rideManager.currentActiveEnergyKcal else { return "-- cal" }
+        return "\(Int(kcal.rounded())) cal"
+    }
+
+    /// elevationGainMeters defaults to 0 rather than nil (a ride genuinely
+    /// starts at zero gain), so this always has a real number to show --
+    /// no placeholder branch needed, unlike distance/calories above.
+    private var elevationValueText: String {
+        String(format: "%.0f ft", rideManager.elevationGainMeters * 3.28084)
     }
 
     private var statusText: String {

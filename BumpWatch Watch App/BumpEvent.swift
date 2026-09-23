@@ -40,12 +40,31 @@ struct BumpEvent: Codable, Identifiable {
     var heartRateBPM: Double?
 }
 
+/// A single GPS sample taken periodically throughout the ride to trace its
+/// actual path -- unlike BumpEvent, this isn't tied to a detected bump, it's
+/// just "the bike was here at this point in the ride." See
+/// RideManager.maybeRecordRoutePoint(_:) for the distance-based sampling
+/// rule (roughly one point every 20m). This is what lets the map show which
+/// streets were actually ridden, not just where a bump happened to occur.
+struct RoutePoint: Codable {
+    /// Seconds since the ride started -- same convention as
+    /// BumpEvent.rideElapsedSeconds.
+    var rideElapsedSeconds: Double
+    var latitude: Double
+    var longitude: Double
+}
+
 /// A full ride: metadata plus every bump detected during it.
 struct RideRecord: Codable, Identifiable {
     var id: String = UUID().uuidString
     var startTime: Date
     var endTime: Date?
     var bumps: [BumpEvent] = []
+    /// The ride's actual path, sampled roughly every 20m -- see RoutePoint.
+    /// Capped at RideManager.maxRoutePointsPerRide; separate from bumps
+    /// entirely (a ride can have route points and zero bumps, which is the
+    /// whole point -- see the "ride coverage" map layer this feeds).
+    var routePoints: [RoutePoint] = []
 
     /// Set to true once the ride has been successfully uploaded, so we know
     /// it's safe to delete the local copy (or at least stop retrying).

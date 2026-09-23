@@ -61,15 +61,30 @@ function unwrapValue(value) {
   return null;
 }
 
+// doc.name is the full resource path, e.g.
+// ".../documents/rides/RIDE_ID/bumps/AUTO_ID" -- rideId isn't a stored
+// field on the bump doc itself, it's the parent segment of this path
+// (same thing the Admin SDK side gets via doc.ref.parent.parent.id in
+// functions/index.js's fetchAllBumpsForRecompute).
+function rideIdFromResourceName(name) {
+  const match = typeof name === "string" ? name.match(/\/rides\/([^/]+)\/bumps\//) : null;
+  return match ? match[1] : null;
+}
+
 function parseBumpDocument(doc) {
   const fields = doc.fields ?? {};
   const get = (name) => unwrapValue(fields[name]);
+  const rawTimestamp = get("timestamp");
   return {
     latitude: get("latitude"),
     longitude: get("longitude"),
     magnitudeG: get("magnitudeG"),
     horizontalAccuracyMeters: get("horizontalAccuracyMeters"),
     speedMetersPerSecond: get("speedMetersPerSecond"),
+    // REST gives timestampValue back as an ISO string (see unwrapValue
+    // above); topStretchesCore's recency-window filter wants a real Date.
+    timestamp: rawTimestamp ? new Date(rawTimestamp) : null,
+    rideId: rideIdFromResourceName(doc.name),
   };
 }
 
@@ -116,9 +131,9 @@ async function main() {
   console.log(`\nWrote ${metros.length} metro area(s) to ${OUTPUT_PATH} (local preview only -- see header comment)`);
   for (const metro of metros) {
     console.log(`\n${metro.name}:`);
-    console.log("  Speed-weighted top 5:");
+    console.log(`  Speed-weighted top ${metro.weighted.length}:`);
     for (const s of metro.weighted) console.log(`    - ${s.name} (${s.bumpCount} bumps, ${s.totalSeverityG}g total)`);
-    console.log("  Raw-severity top 5 (no speed weighting):");
+    console.log(`  Raw-severity top ${metro.unweighted.length} (no speed weighting):`);
     for (const s of metro.unweighted) console.log(`    - ${s.name} (${s.bumpCount} bumps, ${s.totalSeverityG}g total)`);
   }
 }
