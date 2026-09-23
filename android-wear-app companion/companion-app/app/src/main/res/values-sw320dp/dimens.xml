@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Watch Image - Small phones (320dp-359dp width) -->
+    <dimen name="watch_image_size">220dp</dimen>
+    <dimen name="watch_container_height">240dp</dimen>
+
+    <!-- Typography -->
+    <dimen name="app_title_size">24sp</dimen>
+    <dimen name="status_text_size">13sp</dimen>
+    <dimen name="status_subtext_size">12sp</dimen>
+
+    <!-- Button -->
+    <dimen name="install_button_height">52dp</dimen>
+    <dimen name="button_margin_horizontal">20dp</dimen>
+
+    <!-- Spacing -->
+    <dimen name="content_padding_horizontal">20dp</dimen>
+    <dimen name="section_spacing">16dp</dimen>
+
+    <!-- Navigation -->
+    <dimen name="nav_margin_horizontal">16dp</dimen>
+    <dimen name="nav_height">60dp</dimen>
+</resources>

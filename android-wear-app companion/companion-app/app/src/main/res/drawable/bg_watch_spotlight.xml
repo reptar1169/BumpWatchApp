@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Radial spotlight effect behind the watch image -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="160dp"
+        android:centerX="50%"
+        android:centerY="50%"
+        android:startColor="#1828638A"
+        android:endColor="#00000000" />
+    <size
+        android:width="320dp"
+        android:height="320dp" />
+</shape>

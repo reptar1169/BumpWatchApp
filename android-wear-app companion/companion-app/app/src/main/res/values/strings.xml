@@ -1,0 +1,80 @@
+<resources>
+    <!--
+    NOTE: The following values are now configured via .env file:
+    - app_name
+    - policy_url
+    - support_email
+    - more_apps_url
+
+    See .env.example for configuration instructions.
+    -->
+
+    <!-- Main Screen -->
+    <string name="app_subtitle">Companion app for your watch</string>
+    <string name="app_description">This companion app helps you install the app to your wearable device.</string>
+    <string name="connection_label">Connection Status</string>
+    <string name="status_on">Your device is connected.\nClick the button below to continue on the watch.</string>
+    <string name="status_off">No connected device found.\nConnect your Wear OS device and refresh.</string>
+    <string name="status_placeholder">Checking…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Not Connected</string>
+    <string name="status_card_title_connected">Watch Connected</string>
+    <string name="status_card_title_searching">Looking for Watch</string>
+    <string name="status_card_title_not_found">No Watch Found</string>
+    <string name="status_card_hint_connected">Tap below to install</string>
+    <string name="status_card_hint_searching">Make sure your watch is nearby</string>
+    <string name="status_card_hint_not_found">Connect your Wear OS watch and refresh</string>
+    <string name="cta_button">Install to Watch</string>
+    <string name="wearable_connected">%1$s</string>
+    <string name="multiple_watches_connected">%1$d watches connected</string>
+    <string name="no_wearable">No watch found</string>
+    <string name="check_watch">Check your watch</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_rate">Rate</string>
+    <string name="nav_more">Apps</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Compatibility Notice -->
+    <string name="compatibility_title">Wear OS Required</string>
+    <string name="compatibility_message">This app only works with Wear OS watches (Samsung Galaxy Watch 4+, Google Pixel Watch, etc.).\n\nNot compatible with: OnePlus Watch, Huawei, Xiaomi, Amazfit, Garmin, or Apple Watch.</string>
+    <string name="compatibility_ok">I Understand</string>
+    <string name="compatibility_learn_more">Learn More</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="back">Back</string>
+    <string name="version_label">Version</string>
+    <string name="setting_theme">Theme</string>
+    <string name="setting_theme_system">System default</string>
+    <string name="setting_theme_light">Light</string>
+    <string name="setting_theme_dark">Dark</string>
+    <string name="setting_rate">Rate &amp; Review</string>
+    <string name="setting_more_apps">More Apps</string>
+    <string name="setting_contact">Contact Support</string>
+    <string name="setting_share">Share App</string>
+    <string name="setting_privacy">Privacy Policy</string>
+    <string name="setting_compatibility">Watch Compatibility</string>
+    <string name="version_format">Version %1$s</string>
+
+    <!-- Share -->
+    <string name="share_message">Check out %1$s!\n\n%2$s</string>
+    <string name="share_via">Share via</string>
+
+    <!-- Email -->
+    <string name="support_email_subject">Support: %1$s</string>
+
+    <!-- Watch Selection Dialog -->
+    <string name="no_watch_title">No Wear OS Watch Found</string>
+    <string name="no_watch_message">This app requires a Wear OS compatible watch.\n\nPlease make sure your watch is connected and try again.</string>
+    <string name="no_watch_ok">Got It</string>
+    <string name="no_watch_learn_more">Learn More</string>
+    <string name="select_watch_title">Select Watch</string>
+    <string name="select_watch_message">Multiple watches detected. Select which watch to install to:</string>
+    <string name="installing_to_watch">Opening Play Store on %1$s…</string>
+
+    <!-- Success Snackbar -->
+    <string name="snackbar_success_title">Play Store Opened</string>
+    <string name="snackbar_success_message">Check %1$s to continue installation</string>
+</resources>

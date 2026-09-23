@@ -1,0 +1,11 @@
+# This folder mixes the actual companion-app/ project with loose build
+# output (signed APKs/AABs, a keystore, source-export zips) that got
+# saved alongside it rather than into companion-app/ itself. None of
+# that belongs in version control -- see companion-app/.gitignore for
+# the project's own ignores.
+*.jks
+*.keystore
+*.apk
+*.aab
+*.zip
+.DS_Store

@@ -1,0 +1,25 @@
+# Build output -- regenerated from source, never worth versioning.
+build/
+.gradle/
+.kotlin/
+captures/
+
+# Android Studio / IntelliJ project-local state.
+.idea/
+*.iml
+local.properties
+
+# macOS Finder metadata.
+.DS_Store
+
+# Signing material -- never commit a keystore.
+*.jks
+*.keystore
+
+# Built app packages -- rebuild with ./gradlew instead of tracking the binary.
+*.apk
+*.aab
+
+# White-labeling config (app name/package/colors) -- per-environment, not source.
+.env
+.env.*
