@@ -19,8 +19,8 @@ android {
         // supports -- see https://developer.android.com/health-and-fitness/health-services
         minSdk = 30
         targetSdk = 36
-        versionCode = 7
-        versionName = "7.0"
+        versionCode = 9
+        versionName = "9.0"
     }
 
     buildFeatures {
