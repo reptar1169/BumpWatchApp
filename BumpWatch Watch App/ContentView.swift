@@ -3,40 +3,46 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var rideManager = RideManager()
 
+    /// Which page of the in-ride TabView is showing. Mirrors Apple's own
+    /// Workout app: controls sit to the LEFT of the metrics (swipe right to
+    /// reach Pause/End), metrics are what you land on, and extra stats sit
+    /// to the right.
+    private enum RecordingPage: Hashable {
+        case controls, metrics, moreStats
+    }
+
+    @State private var recordingPage: RecordingPage = .metrics
+
     var body: some View {
-        // watchOS's native swipe-between-pages convention (the same one
-        // Apple's own Workout app uses for Now Playing / Metrics / Elapsed
-        // Time) -- mainPage is the original single-screen layout, unchanged;
-        // statsPage is the new page this swipes to on the right.
-        TabView {
-            mainPage
-            statsPage
+        Group {
+            if rideManager.isRecording {
+                recordingPages
+            } else {
+                startScreen
+            }
         }
-        .tabViewStyle(.page(indexDisplayMode: .automatic))
         .onAppear {
             rideManager.requestPermissions()
             UploadService.shared.retryPendingUploads()
         }
+        // Every new ride opens on the metrics page, never on whichever page
+        // the previous ride happened to end on (usually controls, since
+        // that's where End lives).
+        .onChange(of: rideManager.isRecording) { _, isRecording in
+            if isRecording { recordingPage = .metrics }
+        }
     }
 
-    private var mainPage: some View {
+    // MARK: - Pre-ride
+
+    /// Idle / starting screen. No paging here -- there's nothing to swipe
+    /// to before a ride exists (the distance/calories/elevation page used
+    /// to be reachable pre-ride, but only ever showed "--" placeholders).
+    private var startScreen: some View {
         VStack(spacing: 8) {
-            if rideManager.isRecording {
-                heartRateHeadline
-
-                if rideManager.isPaused {
-                    Text("Paused")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                }
-
-                Text(formattedElapsed)
-                    .font(.system(.title2, design: .rounded).monospacedDigit())
-                bumpCountLine
-                    .font(.caption)
-            } else if rideManager.isStarting {
-                Text(statusText)
-                    .font(.headline)
+            Text(statusText)
+                .font(.headline)
+            if rideManager.isStarting {
                 // Deliberately not ProgressView() -- confirmed on-device
                 // that it triggers a synchronous, first-time CoreUI
                 // theme/asset load on watchOS (visible in the console as
@@ -49,62 +55,137 @@ struct ContentView: View {
                 Text(" ")
                     .font(.caption)
             } else {
-                Text(statusText)
-                    .font(.headline)
                 Text("Tap to start recording your ride")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
-            if rideManager.isRecording {
-                HStack(spacing: 8) {
-                    Button(action: togglePause) {
-                        Text(rideManager.isPaused ? "Resume" : "Pause")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .tint(rideManager.isPaused ? .green : .yellow)
-                    .buttonStyle(.borderedProminent)
+            Button(action: rideManager.startRide) {
+                Text("Start")
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(.green)
+            .buttonStyle(.borderedProminent)
+            // Not hidden -- disabled. A HealthKit-session failure sets
+            // lastError asynchronously and always clears isStarting, so
+            // the button reliably comes back; disabling (rather than
+            // hiding) keeps the layout stable while that resolves.
+            .disabled(rideManager.isStarting)
 
-                    Button(action: rideManager.stopRide) {
-                        Text("Finish")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .tint(.red)
-                    .buttonStyle(.borderedProminent)
-                }
-            } else {
-                Button(action: rideManager.startRide) {
-                    Text("Start")
-                        .frame(maxWidth: .infinity)
-                }
-                .tint(.green)
-                .buttonStyle(.borderedProminent)
-                // Not hidden -- disabled. A HealthKit-session failure sets
-                // lastError asynchronously and always clears isStarting, so
-                // the button reliably comes back; disabling (rather than
-                // hiding) keeps the layout stable while that resolves.
-                .disabled(rideManager.isStarting)
+            errorText
+        }
+        .padding()
+    }
+
+    // MARK: - In-ride pages
+
+    /// Same layout as Apple's Workout app: [controls] <- [metrics] -> [more stats].
+    /// Metrics is the default, so a glance at the wrist mid-ride shows
+    /// numbers only, and Pause/End take a deliberate swipe to reach --
+    /// no accidental taps on a bumpy road.
+    private var recordingPages: some View {
+        TabView(selection: $recordingPage) {
+            controlsPage
+                .tag(RecordingPage.controls)
+            metricsPage
+                .tag(RecordingPage.metrics)
+            moreStatsPage
+                .tag(RecordingPage.moreStats)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .automatic))
+    }
+
+    /// Stats only -- no buttons. Heart rate, elapsed time, bump count.
+    private var metricsPage: some View {
+        VStack(spacing: 8) {
+            heartRateHeadline
+
+            if rideManager.isPaused {
+                Text("Paused")
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
             }
 
-            if let error = rideManager.lastError {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+            Text(formattedElapsed)
+                .font(.system(.title2, design: .rounded).monospacedDigit())
+            bumpCountLine
+                .font(.caption)
+
+            // Not a control, and rare (e.g. location access denied) -- but
+            // important enough mid-ride that it shouldn't hide on a page
+            // you'd only visit to pause.
+            errorText
+        }
+        .padding()
+    }
+
+    /// Swipe-right page: End and Pause/Resume, laid out like the Workout
+    /// app's controls (End on the left, Pause on the right, big tinted
+    /// circles with a label underneath).
+    private var controlsPage: some View {
+        VStack(spacing: 10) {
+            Text(formattedElapsed)
+                .font(.system(.headline, design: .rounded).monospacedDigit())
+                .foregroundStyle(rideManager.isPaused ? Color.yellow : Color.secondary)
+
+            HStack(spacing: 20) {
+                controlButton(
+                    systemImage: "xmark",
+                    label: "End",
+                    tint: .red,
+                    action: rideManager.stopRide
+                )
+                controlButton(
+                    systemImage: rideManager.isPaused ? "play.fill" : "pause.fill",
+                    label: rideManager.isPaused ? "Resume" : "Pause",
+                    tint: rideManager.isPaused ? .green : .yellow,
+                    action: togglePause
+                )
             }
         }
         .padding()
     }
 
-    /// The swipe-right page: live distance, calories, and elevation gain
-    /// for the in-progress ride. Shows "--" placeholders (mirroring
-    /// heartRateValueText/bumpCountLine's existing approach) rather than
-    /// hiding the page entirely before a ride starts or before the first
-    /// sample of each type has arrived -- simpler than conditionally
-    /// changing which pages exist, and swiping over to an empty-looking
-    /// page pre-ride is a reasonable way to discover it exists.
-    private var statsPage: some View {
+    /// A hand-built circle rather than `.buttonBorderShape(.circle)`, so the
+    /// look is the Workout app's tinted-translucent-disc-with-colored-glyph
+    /// rather than a solid filled button.
+    private func controlButton(
+        systemImage: String,
+        label: String,
+        tint: Color,
+        action: @escaping @MainActor () -> Void
+    ) -> some View {
+        VStack(spacing: 4) {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 58, height: 58)
+                    .background(Circle().fill(tint.opacity(0.25)))
+            }
+            .buttonStyle(.plain)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var errorText: some View {
+        if let error = rideManager.lastError {
+            Text(error)
+                .font(.caption2)
+                .foregroundStyle(.red)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    /// Swipe-left page (right of metrics): live distance, calories, and
+    /// elevation gain. Shows "--" placeholders (mirroring
+    /// heartRateValueText/bumpCountLine's existing approach) until the
+    /// first sample of each type arrives, so the layout doesn't jump.
+    private var moreStatsPage: some View {
         VStack(spacing: 14) {
             statTile(label: "Distance", value: distanceValueText)
             statTile(label: "Calories", value: calorieValueText)
@@ -193,9 +274,12 @@ struct ContentView: View {
         return "\(Int(bpm.rounded()))"
     }
 
+    /// Pausing stays on the controls page (so Resume/End are right there);
+    /// resuming slides back to metrics, the same way the Workout app does.
     private func togglePause() {
         if rideManager.isPaused {
             rideManager.resumeRide()
+            withAnimation { recordingPage = .metrics }
         } else {
             rideManager.pauseRide()
         }
