@@ -1,0 +1,13 @@
+<resources>
+    <!-- Launch (splash) theme. Google Play's Wear App Quality Guidelines
+         ("Branded launch") require the app icon on a black background
+         while the app starts; without this, launch showed a plain
+         default-theme screen and 9.0 was rejected for it. MainActivity
+         calls installSplashScreen(), which swaps to postSplashScreenTheme
+         once the first frame is ready. -->
+    <style name="Theme.BumpWatch.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@android:style/Theme.DeviceDefault</item>
+    </style>
+</resources>

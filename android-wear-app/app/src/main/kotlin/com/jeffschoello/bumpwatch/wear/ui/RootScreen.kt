@@ -4,15 +4,18 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,20 +31,27 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
-import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
+import androidx.wear.compose.material3.EdgeButton
+import androidx.wear.compose.material3.EdgeButtonSize
+import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import com.jeffschoello.bumpwatch.wear.R
 import com.jeffschoello.bumpwatch.wear.ride.RideManager
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 // Same palette the previous layout used for Start/Pause/Finish, so the
 // controls keep their meaning across the redesign.
@@ -65,12 +75,12 @@ private const val PAGE_COUNT = 3
  * above.
  */
 @Composable
-fun RootScreen(rideManager: RideManager) {
+fun RootScreen(rideManager: RideManager, onStartRide: () -> Unit) {
     val isRecording by rideManager.isRecording.collectAsState()
     if (isRecording) {
         RecordingPager(rideManager)
     } else {
-        StartScreen(rideManager)
+        StartScreen(rideManager, onStartRide)
     }
 }
 
@@ -98,57 +108,120 @@ private fun RecordingPager(rideManager: RideManager) {
     }
 }
 
+/**
+ * Every page is a ScalingLazyColumn rather than a fixed, centered Column.
+ * Google Play rejected 9.0 because with a large system font size the Start
+ * screen's text ran off the round edges and the Start button was pushed off
+ * the bottom entirely -- a fixed Column has nowhere for overflow to go. This
+ * scrolls (touch and rotary crown/bezel) when content doesn't fit, auto-
+ * centers when it does, and the horizontal inset keeps wrapped lines away
+ * from the curved edges of a round display.
+ */
+@Composable
+private fun PageColumn(content: ScalingLazyListScope.() -> Unit) {
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    ScalingLazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = rememberScalingLazyListState(),
+        contentPadding = PaddingValues(horizontal = screenWidth * 0.10f, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        content = content,
+    )
+}
+
 // ---------------------------------------------------------------------
 // Pre-ride
 // ---------------------------------------------------------------------
 
+/**
+ * Start is an EdgeButton in a ScreenScaffold -- Wear's standard spot for a
+ * screen's primary action. It hugs the bottom curve of a round display, so
+ * it can't get clipped by the edge the way an ordinary full-width Button
+ * sitting at the bottom of the list did, and the logo/title/text above it
+ * scroll independently if a large font size makes them taller than the
+ * screen.
+ */
 @Composable
-private fun StartScreen(rideManager: RideManager) {
+private fun StartScreen(rideManager: RideManager, onStartRide: () -> Unit) {
     val lastError by rideManager.lastError.collectAsState()
+    val listState = rememberScalingLazyListState()
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        // The launcher glyph itself (res/drawable/brand_logo.png --
-        // cropped straight out of the same source icon used for
-        // mipmap-*/ic_launcher_foreground.png, just without the
-        // adaptive-icon safe-zone shrink since this isn't a launcher
-        // icon). The title text below is colored with a gradient
-        // sampled from that same glyph's own yellow-to-red bar
-        // (#FFC03D -> #FF4E3D) so the wordmark reads as one mark
-        // with the logo instead of plain default-styled text next
-        // to it.
-        Image(
-            painter = painterResource(R.drawable.brand_logo),
-            contentDescription = null,
-            modifier = Modifier.height(64.dp),
-        )
-        Text(
-            "Bike Lane Bumps",
-            style = TextStyle(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFFFFC03D), Color(0xFFFF4E3D)),
+    ScreenScaffold(
+        scrollState = listState,
+        contentPadding = PaddingValues(
+            start = screenWidth * 0.10f,
+            end = screenWidth * 0.10f,
+            top = 20.dp,
+        ),
+        edgeButton = {
+            EdgeButton(
+                // Goes through MainActivity so any missing permissions get
+                // asked for first -- see startRideWithPermissions().
+                onClick = onStartRide,
+                buttonSize = EdgeButtonSize.Medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Green,
+                    contentColor = Color.White,
                 ),
-            ),
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-        )
-        Text("Tap to start recording your ride")
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { rideManager.startRide() },
-            modifier = Modifier.height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Green,
-                contentColor = Color.White,
-            ),
+                // Lets a scroll gesture that starts on the button still
+                // scroll the list, same as the Wear Material3 sample.
+                modifier = Modifier.scrollable(
+                    listState,
+                    orientation = Orientation.Vertical,
+                    reverseDirection = true,
+                    overscrollEffect = rememberOverscrollEffect(),
+                ),
+            ) {
+                Text("Start", fontSize = 18.sp)
+            }
+        },
+    ) { contentPadding ->
+        ScalingLazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            // Includes the bottom gap above the EdgeButton -- see
+            // ScreenScaffold's edgeButtonSpacing.
+            contentPadding = contentPadding,
+            // Start from the top rather than centering an item mid-screen;
+            // centering is what pushed the old Start button down into the
+            // curved bottom edge.
+            autoCentering = null,
         ) {
-            Text("Start", fontSize = 18.sp)
+            item {
+                // The launcher glyph itself (res/drawable/brand_logo.png --
+                // cropped straight out of the same source icon used for
+                // mipmap-*/ic_launcher_foreground.png, just without the
+                // adaptive-icon safe-zone shrink since this isn't a launcher
+                // icon). The title text below is colored with a gradient
+                // sampled from that same glyph's own yellow-to-red bar
+                // (#FFC03D -> #FF4E3D) so the wordmark reads as one mark
+                // with the logo instead of plain default-styled text next
+                // to it.
+                Image(
+                    painter = painterResource(R.drawable.brand_logo),
+                    contentDescription = null,
+                    modifier = Modifier.height(64.dp),
+                )
+            }
+            item {
+                Text(
+                    "Bike Lane Bumps",
+                    style = TextStyle(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFFFFC03D), Color(0xFFFF4E3D)),
+                        ),
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            item {
+                Text("Tap to start recording your ride", textAlign = TextAlign.Center)
+            }
+            lastError?.let { message -> item { ErrorText(message) } }
         }
-
-        lastError?.let { ErrorText(it) }
     }
 }
 
@@ -166,30 +239,27 @@ private fun MetricsPage(rideManager: RideManager) {
     val heartRate by rideManager.currentHeartRateBPM.collectAsState()
     val lastError by rideManager.lastError.collectAsState()
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            "♥ ${heartRate?.roundToInt() ?: "--"}",
-            fontWeight = FontWeight.Bold,
-            fontSize = 32.sp,
-        )
-
-        if (isPaused) {
-            Text("Paused", color = Amber)
+    PageColumn {
+        item {
+            Text(
+                "♥ ${heartRate?.roundToInt() ?: "--"}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 32.sp,
+                textAlign = TextAlign.Center,
+            )
         }
-
-        Text(formatElapsed(elapsedSeconds), fontSize = 18.sp)
-
-        val magnitudeSuffix = lastBumpMagnitudeG?.let { " · last ${"%.2f".format(it)}g" } ?: ""
-        Text("$bumpCount bumps$magnitudeSuffix", fontSize = 18.sp)
-
+        if (isPaused) {
+            item { Text("Paused", color = Amber, textAlign = TextAlign.Center) }
+        }
+        item { Text(formatElapsed(elapsedSeconds), fontSize = 18.sp, textAlign = TextAlign.Center) }
+        item {
+            val magnitudeSuffix = lastBumpMagnitudeG?.let { " · last ${"%.2f".format(it)}g" } ?: ""
+            Text("$bumpCount bumps$magnitudeSuffix", fontSize = 18.sp, textAlign = TextAlign.Center)
+        }
         // Not a control, and rare (e.g. location permission denied) -- but
         // important enough mid-ride that it shouldn't hide on a page you'd
         // only visit to pause.
-        lastError?.let { ErrorText(it) }
+        lastError?.let { message -> item { ErrorText(message) } }
     }
 }
 
@@ -203,38 +273,38 @@ private fun ControlsPage(rideManager: RideManager, onResumed: () -> Unit) {
     val isPaused by rideManager.isPaused.collectAsState()
     val elapsedSeconds by rideManager.elapsedSeconds.collectAsState()
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            formatElapsed(elapsedSeconds),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isPaused) Amber else Color.LightGray,
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            ControlButton(
-                glyph = ControlGlyph.End,
-                label = "End",
-                tint = Red,
-                onClick = { rideManager.stopRide() },
+    PageColumn {
+        item {
+            Text(
+                formatElapsed(elapsedSeconds),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isPaused) Amber else Color.LightGray,
+                textAlign = TextAlign.Center,
             )
-            ControlButton(
-                glyph = if (isPaused) ControlGlyph.Play else ControlGlyph.Pause,
-                label = if (isPaused) "Resume" else "Pause",
-                tint = if (isPaused) Green else Amber,
-                onClick = {
-                    if (isPaused) {
-                        rideManager.resumeRide()
-                        onResumed()
-                    } else {
-                        rideManager.pauseRide()
-                    }
-                },
-            )
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                ControlButton(
+                    glyph = ControlGlyph.End,
+                    label = "End",
+                    tint = Red,
+                    onClick = { rideManager.stopRide() },
+                )
+                ControlButton(
+                    glyph = if (isPaused) ControlGlyph.Play else ControlGlyph.Pause,
+                    label = if (isPaused) "Resume" else "Pause",
+                    tint = if (isPaused) Green else Amber,
+                    onClick = {
+                        if (isPaused) {
+                            rideManager.resumeRide()
+                            onResumed()
+                        } else {
+                            rideManager.pauseRide()
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -286,7 +356,7 @@ private fun ControlButton(glyph: ControlGlyph, label: String, tint: Color, onCli
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(label, fontSize = 13.sp, color = Color.LightGray)
+        Text(label, fontSize = 13.sp, color = Color.LightGray, textAlign = TextAlign.Center)
     }
 }
 
@@ -299,31 +369,27 @@ private fun MoreStatsPage(rideManager: RideManager) {
     val calories by rideManager.currentActiveEnergyKcal.collectAsState()
     val elevationMeters by rideManager.elevationGainMeters.collectAsState()
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
+    PageColumn {
         // Miles/feet, matching the mph conversion already used for speed
         // elsewhere in this project (see UploadService.swift/app.js's
         // popup) rather than mixing unit systems across platforms.
-        StatTile("Distance", distanceMeters?.let { "%.2f mi".format(it * 0.000621371) } ?: "-- mi")
-        StatTile("Calories", calories?.let { "${it.roundToInt()} cal" } ?: "-- cal")
-        StatTile("Elevation", "%.0f ft".format(elevationMeters * 3.28084))
+        item { StatTile("Distance", distanceMeters?.let { "%.2f mi".format(it * 0.000621371) } ?: "-- mi") }
+        item { StatTile("Calories", calories?.let { "${it.roundToInt()} cal" } ?: "-- cal") }
+        item { StatTile("Elevation", "%.0f ft".format(elevationMeters * 3.28084)) }
     }
 }
 
 @Composable
 private fun StatTile(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.SemiBold, fontSize = 22.sp)
-        Text(label, fontSize = 15.sp)
+        Text(value, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, textAlign = TextAlign.Center)
+        Text(label, fontSize = 15.sp, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun ErrorText(message: String) {
-    Text(message, fontSize = 12.sp, color = Red)
+    Text(message, fontSize = 12.sp, color = Red, textAlign = TextAlign.Center)
 }
 
 private fun formatElapsed(totalSeconds: Double): String {

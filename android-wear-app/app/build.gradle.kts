@@ -19,8 +19,8 @@ android {
         // supports -- see https://developer.android.com/health-and-fitness/health-services
         minSdk = 30
         targetSdk = 36
-        versionCode = 9
-        versionName = "9.0"
+        versionCode = 10
+        versionName = "10.0"
     }
 
     buildFeatures {
@@ -65,6 +65,11 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("androidx.activity:activity-compose:1.10.1")
+    // Branded launch screen (app icon on black) -- required by Play's Wear
+    // App Quality Guidelines; see res/values/themes.xml. 1.2.0+ sizes the
+    // icon for watch screens (48dp) on Wear OS 3, where the platform
+    // SplashScreen API doesn't exist yet.
+    implementation("androidx.core:core-splashscreen:1.2.0")
     // Explicit pin, not a transitive pull -- without this, whatever older
     // Fragment version activity-compose/wear-compose bring in transitively
     // trips lint's InvalidFragmentVersionForActivityResult check on
