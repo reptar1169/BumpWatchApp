@@ -92,3 +92,6 @@ playground.xcworkspace/
 # iOS-container-target migration -- not part of the project, safe to ignore.
 BumpWatch 2026-08-16 12-55-15/
 BumpWatch 2026-08-16 12-59-58/
+
+# generate-bike-lanes.mjs progress cache -- local only, safe to delete
+scripts/.bike-lanes-cache.json

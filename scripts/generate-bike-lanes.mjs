@@ -7,6 +7,10 @@
 // as generate-top-stretches.mjs):
 //   node scripts/generate-bike-lanes.mjs
 //
+// Safe to stop (Ctrl+C) and rerun: progress is saved per region in
+// scripts/.bike-lanes-cache.json, and the output file is only written once
+// every region has succeeded (see "Progress cache" below).
+//
 // ---- Why a separate static file instead of querying live ----
 // Same reasoning as generate-top-stretches.mjs: bike lane geometry barely
 // changes day to day, and having every visitor's browser hit Overpass
@@ -50,7 +54,7 @@
 // repair-priority pitch -- "unprotected painted lane" is itself useful
 // context next to where the worst bumps are.
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -98,13 +102,33 @@ const BBOX_PADDING_METERS = 300; // extend each region past its own bumps a
 // likely to still be cooling down from earlier in this debugging session.
 // Full list: https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
 const OVERPASS_MIRRORS = [
-  "https://overpass.private.coffee/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass-api.de/api/interpreter",
+  // Tried last, same as functions/topStretchesCore.js: private.coffee tends
+  // to barely succeed on a late retry rather than fail outright, so the
+  // circuit breaker below never marks it dead and every region pays its
+  // full retry budget before reaching a healthier mirror. A Sept 2026 run
+  // managed only 16 of 157 regions in two hours with it first.
+  "https://overpass.private.coffee/api/interpreter",
 ];
 // Same identifying User-Agent convention as generate-top-stretches.mjs.
 const OVERPASS_USER_AGENT = "bikelanebumps.org bike-lanes script (schoellojeff@gmail.com)";
 const OVERPASS_TIMEOUT_S = 60;
+// Client-side cap on a single Overpass request, a bit past the server-side
+// [timeout:] above. Without it, a mirror that accepts the connection and
+// then stalls can hold a request open for many minutes; with it, the stall
+// becomes an ordinary retryable failure ("operation was aborted due to
+// timeout") and the retry/next-mirror logic below takes over.
+const OVERPASS_REQUEST_TIMEOUT_MS = 90_000;
+
+// ---- Progress cache ----
+// Every region's Overpass result is saved here as soon as it arrives, so a
+// run that's stopped (Ctrl+C, lost wifi) or that has some regions fail can
+// just be rerun -- regions already fetched come from this file instead of
+// Overpass. Entries older than CACHE_MAX_AGE_MS are ignored so a run weeks
+// later still gets fresh lane data. Gitignored; safe to delete any time.
+const CACHE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), ".bike-lanes-cache.json");
+const CACHE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 // One query per region now instead of one total -- same politeness
 // convention as generate-top-stretches.mjs's shared external-call throttle,
 // just longer: Overpass's public instance appears to rate-limit on
@@ -140,7 +164,27 @@ async function politeFetch(url, options) {
   const elapsed = Date.now() - lastExternalCallAt;
   if (elapsed < EXTERNAL_API_DELAY_MS) await sleep(EXTERNAL_API_DELAY_MS - elapsed);
   lastExternalCallAt = Date.now();
-  return fetch(url, options);
+  return fetch(url, { ...options, signal: AbortSignal.timeout(OVERPASS_REQUEST_TIMEOUT_MS) });
+}
+
+async function loadCache() {
+  try {
+    const cache = JSON.parse(await readFile(CACHE_PATH, "utf8"));
+    const now = Date.now();
+    return Object.fromEntries(
+      Object.entries(cache).filter(([, entry]) => now - entry.fetchedAt < CACHE_MAX_AGE_MS)
+    );
+  } catch {
+    return {}; // no cache yet (or unreadable) -- start fresh
+  }
+}
+
+async function saveCache(cache) {
+  await writeFile(CACHE_PATH, JSON.stringify(cache) + "\n", "utf8");
+}
+
+function cacheKey(bbox) {
+  return [bbox.south, bbox.west, bbox.north, bbox.east].map((n) => n.toFixed(5)).join(",");
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -498,6 +542,8 @@ async function main() {
   const wayById = new Map();
   const failedRegions = [];
   let consecutiveFailures = 0;
+  const cache = await loadCache();
+  let fromCache = 0;
 
   for (const [index, regionPoints] of regions.entries()) {
     const bbox = padBounds(boundsOf(regionPoints));
@@ -506,12 +552,23 @@ async function main() {
       `bbox south ${bbox.south.toFixed(5)} north ${bbox.north.toFixed(5)} ` +
       `west ${bbox.west.toFixed(5)} east ${bbox.east.toFixed(5)}`
     );
+    const key = cacheKey(bbox);
+    if (cache[key]) {
+      console.log(`  -> ${cache[key].ways.length} way(s) from progress cache (fetched earlier).`);
+      for (const way of cache[key].ways) {
+        wayById.set(way.id, way);
+      }
+      fromCache++;
+      continue;
+    }
     try {
       const ways = await fetchBikeLaneWays(bbox);
       console.log(`  -> Overpass returned ${ways.length} way(s).`);
       for (const way of ways) {
         wayById.set(way.id, way);
       }
+      cache[key] = { fetchedAt: Date.now(), ways };
+      await saveCache(cache);
       consecutiveFailures = 0;
     } catch (error) {
       // One region persistently failing (rate limit outlasting the retry
@@ -542,11 +599,26 @@ async function main() {
     return counts;
   }, {});
   console.log(`\nBuilt ${features.length} unique lane segment(s) across all regions:`, byKind);
+  if (fromCache > 0) {
+    console.log(`${fromCache} of ${regions.length} region(s) came from the progress cache.`);
+  }
   if (failedRegions.length > 0) {
     console.warn(
       `${failedRegions.length} of ${regions.length} region(s) failed and were skipped ` +
       `(regions: ${failedRegions.join(", ")}) -- rerun the script to retry them.`
     );
+    // Writing now would replace the current (complete) file with one
+    // missing every failed region's lanes. Everything that did succeed is
+    // already in the progress cache, so a rerun only has to fetch the
+    // failed regions. Pass --allow-partial to write anyway.
+    if (!process.argv.includes("--allow-partial")) {
+      console.warn(
+        `Not writing ${OUTPUT_PATH} -- left unchanged. Rerun to fetch just the ` +
+        `failed regions (the rest are cached), or pass --allow-partial to write what succeeded.`
+      );
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const geojson = {
