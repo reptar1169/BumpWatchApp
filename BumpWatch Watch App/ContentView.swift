@@ -38,44 +38,51 @@ struct ContentView: View {
     /// Idle / starting screen. No paging here -- there's nothing to swipe
     /// to before a ride exists (the distance/calories/elevation page used
     /// to be reachable pre-ride, but only ever showed "--" placeholders).
+    ///
+    /// Same layout as the Wear OS app's start screen (RootScreen.kt): the
+    /// brand mark, a yellow-to-red "Bike Lane Bumps" wordmark, the prompt,
+    /// then Start. Wrapped in a ScrollView so it still fits on the smallest
+    /// watches and at large text sizes.
     private var startScreen: some View {
-        VStack(spacing: 8) {
-            Text(statusText)
-                .font(.headline)
-            if rideManager.isStarting {
-                // Deliberately not ProgressView() -- confirmed on-device
-                // that it triggers a synchronous, first-time CoreUI
-                // theme/asset load on watchOS (visible in the console as
-                // "CUIThemeStore: No theme registered with id=0") that
-                // stalls the main thread for multiple seconds, which is
-                // exactly the freeze this state exists to avoid. The
-                // headline above already reads "Starting…", so plain text
-                // is enough here; this just reserves the same vertical
-                // space so the layout doesn't jump.
-                Text(" ")
-                    .font(.caption)
-            } else {
-                Text("Tap to start recording your ride")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(spacing: 6) {
+                BrandMark()
+                    .frame(height: 44)
+                    .accessibilityHidden(true)
+
+                Text("Bike Lane Bumps")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(BrandMark.gradient)
                     .multilineTextAlignment(.center)
-            }
 
-            Button(action: rideManager.startRide) {
-                Text("Start")
-                    .frame(maxWidth: .infinity)
-            }
-            .tint(.green)
-            .buttonStyle(.borderedProminent)
-            // Not hidden -- disabled. A HealthKit-session failure sets
-            // lastError asynchronously and always clears isStarting, so
-            // the button reliably comes back; disabling (rather than
-            // hiding) keeps the layout stable while that resolves.
-            .disabled(rideManager.isStarting)
+                // Deliberately plain text rather than ProgressView() while
+                // starting -- confirmed on-device that ProgressView
+                // triggers a synchronous, first-time CoreUI theme/asset
+                // load on watchOS (visible in the console as "CUIThemeStore:
+                // No theme registered with id=0") that stalls the main
+                // thread for multiple seconds, which is exactly the freeze
+                // this state exists to avoid.
+                Text(rideManager.isStarting ? "Starting…" : "Tap to start recording your ride")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
 
-            errorText
+                Button(action: rideManager.startRide) {
+                    Text("Start")
+                        .frame(maxWidth: .infinity)
+                }
+                .tint(.green)
+                .buttonStyle(.borderedProminent)
+                // Not hidden -- disabled. A HealthKit-session failure sets
+                // lastError asynchronously and always clears isStarting, so
+                // the button reliably comes back; disabling (rather than
+                // hiding) keeps the layout stable while that resolves.
+                .disabled(rideManager.isStarting)
+                .padding(.top, 4)
+
+                errorText
+            }
+            .padding(.horizontal)
         }
-        .padding()
     }
 
     // MARK: - In-ride pages
@@ -224,11 +231,6 @@ struct ContentView: View {
         String(format: "%.0f ft", rideManager.elevationGainMeters * 3.28084)
     }
 
-    private var statusText: String {
-        if rideManager.isStarting { return "Starting…" }
-        return "BumpWatch"
-    }
-
     private var formattedElapsed: String {
         let total = Int(rideManager.elapsedSeconds)
         return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
@@ -283,6 +285,57 @@ struct ContentView: View {
         } else {
             rideManager.pauseRide()
         }
+    }
+}
+
+/// The bikelanebumps.org mark (a wheel riding over a bump in the road),
+/// drawn from the same geometry as the website's favicon.svg -- the Wear OS
+/// app shows the same mark as an image. Drawn in code rather than loaded
+/// from the asset catalog, so it's crisp at any size and adds no image-load
+/// work on the launch screen (see the ProgressView note in startScreen).
+private struct BrandMark: View {
+    static let yellow = Color(red: 1.0, green: 0.753, blue: 0.239)  // #FFC03D
+    static let red = Color(red: 1.0, green: 0.306, blue: 0.239)     // #FF4E3D
+    static let gradient = LinearGradient(
+        colors: [yellow, red], startPoint: .leading, endPoint: .trailing
+    )
+
+    // Bounds of the drawing inside favicon.svg's 100x100 viewBox,
+    // including stroke widths: x 7...93, y 13...77.
+    private static let minX: CGFloat = 7
+    private static let minY: CGFloat = 13
+    private static let width: CGFloat = 86
+    private static let height: CGFloat = 64
+
+    var body: some View {
+        Canvas { context, size in
+            let s = min(size.width / Self.width, size.height / Self.height)
+            let ox = (size.width - Self.width * s) / 2 - Self.minX * s
+            let oy = (size.height - Self.height * s) / 2 - Self.minY * s
+            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
+
+            // Wheel: circle r=22 at (50,38), 5-wide stroke, plus a hub dot.
+            let wheel = Path(ellipseIn: CGRect(x: ox + 28 * s, y: oy + 16 * s, width: 44 * s, height: 44 * s))
+            context.stroke(wheel, with: .color(Self.yellow), lineWidth: 5 * s)
+            let hub = Path(ellipseIn: CGRect(x: ox + 47 * s, y: oy + 35 * s, width: 6 * s, height: 6 * s))
+            context.fill(hub, with: .color(Self.yellow))
+
+            // Road with a bump, yellow-to-red left to right.
+            var road = Path()
+            road.move(to: pt(10, 74))
+            road.addLine(to: pt(34, 74))
+            road.addQuadCurve(to: pt(66, 74), control: pt(50, 54))
+            road.addLine(to: pt(90, 74))
+            context.stroke(
+                road,
+                with: .linearGradient(
+                    Gradient(colors: [Self.yellow, Self.red]),
+                    startPoint: pt(10, 74), endPoint: pt(90, 74)
+                ),
+                style: StrokeStyle(lineWidth: 6 * s, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .aspectRatio(Self.width / Self.height, contentMode: .fit)
     }
 }
 
