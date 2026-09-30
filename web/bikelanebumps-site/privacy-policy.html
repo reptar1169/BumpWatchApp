@@ -59,40 +59,57 @@
 
   <section class="content-section">
     <div class="wrap">
-      <p class="effective-date"><strong>Effective date:</strong> August 16, 2026</p>
+      <p class="effective-date"><strong>Effective date:</strong> September 30, 2026</p>
 
       <p>
-        This Privacy Policy explains what information bikelanebumps.org and the BumpWatch Apple
-        Watch app (together, "BumpWatch," "we," "us," or "our") collect, how it's used, and how
-        it's shared. There is no account or sign-up for either the app or the website — most of
-        what follows is simpler as a result.
+        This Privacy Policy explains what information bikelanebumps.org and the BumpWatch watch
+        app — available for Apple Watch on the App Store, and for Wear OS on Google Play as
+        "Bike Lane Bumps" (together, "BumpWatch," "we," "us," or "our") — collect, how it's used,
+        and how it's shared. There is no account or sign-up for either the app or the website —
+        most of what follows is simpler as a result.
       </p>
 
       <h2>1. Information We Collect</h2>
 
-      <h3>From the BumpWatch Watch app</h3>
+      <h3>From the BumpWatch watch app</h3>
       <p>When you use BumpWatch to record a ride, the app collects and uploads:</p>
       <ul>
-        <li><strong>Location data:</strong> GPS coordinates, accuracy, and speed at the moment each bump is detected.</li>
+        <li><strong>Location data:</strong> GPS coordinates, accuracy, speed, and direction of travel at the moment each bump is detected.</li>
+        <li><strong>Route:</strong> GPS points sampled roughly every 20 meters along the ride, so the map can show which streets have actually been ridden. Every point within 150 meters of the ride's first and last point is removed before it's stored, so a route doesn't reveal exactly where a ride began or ended.</li>
         <li><strong>Bump data:</strong> the severity (peak acceleration) and timestamp of each detected bump.</li>
+        <li><strong>Heart rate:</strong> your heart rate at each detected bump, and the ride's average and maximum heart rate.</li>
         <li><strong>Ride metadata:</strong> a randomly generated ride ID, along with the ride's start and end time and total bump count.</li>
+        <li><strong>Anonymous app ID:</strong> the app signs in with Firebase Anonymous Authentication, which creates a random ID for your installation of the app — with no name, email, or account behind it. We record which ID submitted each ride so we can deal with abuse and handle removal requests. It's stored privately, separate from the public ride data, and isn't shown on or readable from this website.</li>
       </ul>
       <p>
-        We do not collect your name, email address, Apple ID, phone number, or any device
-        identifier. Ride data isn't tied to you as a person in any way we can see — it's tied
-        only to the random ID generated for that one ride.
+        We do not collect your name, email address, Apple ID, Google account, phone number, or
+        any hardware device identifier.
       </p>
       <p>
-        BumpWatch uses your Watch's accelerometer continuously while recording to detect bumps,
-        but that raw motion stream is processed on your Watch and never leaves it — only the
+        BumpWatch uses your watch's accelerometer continuously while recording to detect bumps,
+        but that raw motion stream is processed on your watch and never leaves it — only the
         individual bump events described above are uploaded.
       </p>
       <p>
-        BumpWatch also starts an Apple HealthKit workout session while recording, which is what
-        lets it keep tracking your ride in the background. This creates a normal workout entry in
-        your own Health app, the same as any fitness app would. That entry stays in your personal
-        Health data, governed by Apple and your iCloud account — we don't access, read, or upload
-        any of your broader Health data, and the workout entry itself is never sent to us.
+        <strong>On Apple Watch,</strong> BumpWatch starts an Apple HealthKit workout session
+        while recording, which is what lets it keep tracking your ride in the background. This
+        creates a normal workout entry in your own Health app, the same as any fitness app
+        would. During the ride, the app reads the heart rate, distance, and active calories
+        HealthKit collects for that workout, to show them on your watch and to upload the heart
+        rate values listed above. We don't read any of your other Health data, and the workout
+        entry itself is never sent to us.
+      </p>
+      <p>
+        <strong>On Wear OS,</strong> BumpWatch uses Google's Health Services to run an exercise
+        session while recording, and reads the heart rate, distance, and calories it measures
+        during that session — again, to show them on your watch and to upload the heart rate
+        values listed above. The app doesn't read from or write to Health Connect or any other
+        stored health data. While a ride is recording, the app shows an ongoing notification so
+        it can keep running in the background.
+      </p>
+      <p>
+        On both platforms, distance, calories, and elevation gain are shown on your watch only
+        and are not uploaded.
       </p>
 
       <h3>From bikelanebumps.org</h3>
@@ -101,28 +118,42 @@
         stats. If you allow it, your browser's own location (used only to center the map on your
         area) is requested through your browser's native permission prompt — that location is
         used entirely on your device to position the map and is never sent to us or stored
-        anywhere. We don't use cookies, accounts, or any third-party analytics or advertising
-        trackers on this website.
+        anywhere.
+      </p>
+      <p>
+        The home page shows ads served by Google AdSense. Google and its partners may use cookies
+        to serve ads based on your visits to this and other websites. You can opt out of
+        personalized advertising in <a href="https://www.google.com/settings/ads">Google's Ads
+        Settings</a>, and read more about how Google uses information from sites that show its
+        ads at <a href="https://policies.google.com/technologies/partner-sites">policies.google.com</a>.
+        Apart from those ads, this website doesn't use accounts or analytics trackers and
+        doesn't set cookies of its own.
       </p>
 
       <h2>2. How Information Is Used</h2>
-      <p>Ride and bump data is used for exactly one thing: rendering the public heatmap and the summary stats on this site.</p>
+      <p>
+        Ride and bump data is used for exactly one thing: rendering the public heatmap, the
+        summary stats, and the ranked list of priority stretches on this site.
+      </p>
 
       <h2>3. How Information Is Shared</h2>
       <p>
         <strong>Everything submitted is public.</strong> Because there's no account system, there's
-        no private view of ride data — every bump anyone uploads through BumpWatch appears on the
-        public heatmap, including its exact GPS location, severity, and timestamp. If you're
+        no private view of ride data — everything a ride uploads through BumpWatch, as listed
+        above (including exact GPS locations, the route, and heart rate), is publicly readable
+        by anyone who visits this site or queries its database. The one exception is the
+        anonymous app ID, which is stored privately and never made public. If you're
         recording rides on routes that could identify you (like the streets right around your
-        home), keep in mind that data is visible to anyone who visits this site.
+        home), keep in mind that data is visible to anyone.
       </p>
       <p>
-        <strong>Service providers:</strong> Ride and bump data is stored using Google
-        Firebase (Cloud Functions and Cloud Firestore), hosted on Google Cloud infrastructure.
-        Google acts only as our infrastructure provider and does not use this data for its own
-        purposes. The website's map tiles are served by CARTO, built from OpenStreetMap data; the
-        mapping library (Leaflet) is loaded from a public CDN (unpkg.com). Requests to these
-        third parties are subject to their own standard server logging.
+        <strong>Service providers:</strong> Ride and bump data is stored using Google Firebase
+        (Authentication, Cloud Functions, and Cloud Firestore), hosted on Google Cloud
+        infrastructure. Google acts only as our infrastructure provider for that data and does
+        not use it for its own purposes. Ads on the home page are served by Google AdSense, as
+        described above. The website's map tiles are served by CARTO, built from OpenStreetMap
+        data; the mapping library (Leaflet) is loaded from a public CDN (unpkg.com). Requests to
+        these third parties are subject to their own standard server logging.
       </p>
       <p>We do not sell data, and we don't share it with anyone for advertising or marketing purposes.</p>
       <p><strong>Legal requirements:</strong> We may disclose information if required by law.</p>
@@ -137,11 +168,13 @@
 
       <h2>5. Security</h2>
       <p>
-        Ride data is uploaded over HTTPS and written to Firestore through a Cloud Function
-        protected by a private key embedded in the app — it isn't written to the database
-        directly by any client. Firestore's own access rules allow public read access (so the map
-        can load without an account) but block public write access entirely. No method of
-        transmission or storage is 100% secure, and we can't guarantee absolute security.
+        Ride data is uploaded over HTTPS and written to Firestore through a Cloud Function that
+        only accepts uploads carrying a valid sign-in token from the app's anonymous sign-in
+        (older app versions use a key embedded in the app instead) — it isn't written to the
+        database directly by any client. Firestore's own access rules allow public read access
+        (so the map can load without an account) but block public write access entirely. No
+        method of transmission or storage is 100% secure, and we can't guarantee absolute
+        security.
       </p>
 
       <h2>6. Children's Privacy</h2>

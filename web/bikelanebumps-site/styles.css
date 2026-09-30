@@ -927,6 +927,25 @@ h1, h2, h3 {
 }
 .get-app-inner .section-head { margin: 0; }
 
+/* One card per platform (Apple Watch / Wear OS), stacked in the right-hand
+   column -- or below the heading once .get-app-inner goes single-column. */
+.get-app-options {
+  display: grid;
+  gap: 16px;
+}
+.get-app-options .get-app-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 24px;
+}
+.get-app-options .get-app-card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.get-app-options .get-app-card p {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 0.96rem;
+}
+
 .get-app-card ol {
   margin: 0 0 24px;
   padding-left: 20px;
