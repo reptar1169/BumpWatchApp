@@ -213,11 +213,24 @@ exports.submitRide = onRequest(
           maxHeartRateBPM:
             typeof ride.maxHeartRateBPM === "number" ? ride.maxHeartRateBPM : null,
           receivedAt: FieldValue.serverTimestamp(),
-          // uid is null for rides submitted via the legacy API key (no
-          // per-rider identity available that way) -- see
-          // authenticateRequest() above.
-          submittedByUid: authResult.uid,
-          submittedVia: authResult.via,
+        },
+        { merge: true }
+      );
+
+      // Who submitted the ride lives in its own collection, NOT on the ride
+      // doc: rides/* is publicly readable (the map needs it), and Firestore
+      // rules are per-document, not per-field -- so a uid on the ride doc
+      // would let anyone group every ride from one install together. See
+      // rideSubmitters in firestore.rules (no client access at all). Rides
+      // stored before this split were moved over by a one-time
+      // migrateRideSubmitters function (Sept 2026, since removed).
+      // uid is null for rides submitted via the legacy API key (no
+      // per-rider identity available that way) -- see authenticateRequest().
+      await db.collection("rideSubmitters").doc(ride.id).set(
+        {
+          uid: authResult.uid,
+          via: authResult.via,
+          receivedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );

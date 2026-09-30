@@ -29,6 +29,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Which anonymous-auth uid submitted each ride (plus how it
+    // authenticated). Deliberately separate from /rides: those are public
+    // for the map, and rules can't hide a single field, so the uid lives
+    // here where no client can read or write it. Only Cloud Functions
+    // (Admin SDK) touch this -- see submitRide in functions/index.js.
+    match /rideSubmitters/{rideId} {
+      allow read, write: if false;
+    }
+
     // Written only by the recomputeTopStretches scheduled Cloud Function
     // (see functions/index.js), via the Admin SDK, which bypasses these
     // rules the same way submitRide does for `rides`/`bumps` above --

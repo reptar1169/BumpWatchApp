@@ -57,7 +57,8 @@ Toolkit REST API directly instead (same "plain HTTPS" approach
 up anonymously on first launch, persists the resulting uid/tokens to disk,
 and refreshes the ID token as needed. `UploadService` sends that token as
 `Authorization: Bearer <token>` on every upload; `functions/index.js`
-verifies it with the Admin SDK and stamps the ride with `submittedByUid`.
+verifies it with the Admin SDK and records the uid in `rideSubmitters/{rideId}`
+(private -- see the schema below), not on the public ride doc.
 
 You'll need to enable the **Anonymous** sign-in provider for your project
 once: Firebase Console → Authentication → Sign-in method → Anonymous →
@@ -191,8 +192,16 @@ rides/{rideId}
   averageHeartRateBPM: number | null
   maxHeartRateBPM: number | null
   receivedAt: Timestamp        (server write time)
-  submittedByUid: string | null  (Firebase anonymous-auth uid; null for legacy-key rides -- see "Auth")
-  submittedVia: "auth" | "legacy-key"
+
+rideSubmitters/{rideId}        (private -- no client read/write; Cloud Functions only)
+  uid: string | null           (Firebase anonymous-auth uid; null for legacy-key rides -- see "Auth")
+  via: "auth" | "legacy-key"
+  receivedAt: Timestamp
+  -- Kept off rides/{rideId} because that's publicly readable and Firestore
+     rules can't hide individual fields; a public uid would let anyone
+     group every ride from one install together. Rides stored before this
+     split were moved over once by a one-time migrateRideSubmitters
+     function (Sept 2026, since removed).
 
 rides/{rideId}/bumps/{bumpId}
   timestamp: Timestamp
@@ -284,7 +293,7 @@ against data you've already collected.
   (`geofire-common`) once you have enough rides that pulling every bump on
   every page load gets slow.
 - A companion "my rides" list on the web page, not just the heatmap.
-- Per-`submittedByUid` rate limiting / abuse detection in `submitRide`,
+- Per-uid (`rideSubmitters`) rate limiting / abuse detection in `submitRide`,
   now that rides carry real per-rider identity instead of one shared key.
 - Automate `generate-bike-lanes.mjs` the same way as top-stretches once
   the nightly job has proven reliable -- see "Automated recompute" above.
