@@ -606,13 +606,19 @@ h1, h2, h3 {
    Screenshots
    ========================================================================== */
 
-.screens { padding: 0 0 96px; }
+.screens { padding: 0 0 80px; }
 
 .screens-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 140px));
+  /* Apple Watch pair then Wear OS pair; two per row on narrow screens
+     (see the 640px breakpoint), so each platform gets its own row. */
+  grid-template-columns: repeat(4, minmax(0, 170px));
   justify-content: center;
-  gap: 16px;
+  align-items: start;
+  gap: 24px;
+}
+@media (max-width: 640px) {
+  .screens-grid { grid-template-columns: repeat(2, minmax(0, 160px)); gap: 16px; }
 }
 
 .screen-card {
@@ -633,6 +639,16 @@ h1, h2, h3 {
   border-radius: var(--radius-l);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-card);
+}
+
+/* Wear OS screenshots are square captures of a round display -- clip them
+   to a circle so they read as the watch face they are. The vertical margin
+   (percentages resolve against width) pads the 1:1 circle out to the Apple
+   Watch shots' 416:496 box, so all four watches -- and the captions under
+   them -- line up. */
+.screen-card--round img {
+  border-radius: 50%;
+  margin: 9.6% 0;
 }
 
 .screen-card figcaption {
