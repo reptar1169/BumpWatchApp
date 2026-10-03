@@ -58,6 +58,18 @@ final class RideManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// Saves the ride's GPS track into the HealthKit workout itself, so the
+    /// ride shows a route map in Fitness and apps that export Health
+    /// workouts (e.g. HealthFit -> Strava) carry the route along. Separate
+    /// from currentRide.routePoints, which is the sparse, endpoint-trimmed
+    /// track uploaded for the public map -- this one never leaves the
+    /// user's own Health data.
+    private var routeBuilder: HKWorkoutRouteBuilder?
+    /// Fixes worse than this are left out of the Health route -- same
+    /// cutoff Apple's own workout-route sample code uses, so a GPS
+    /// wobble (e.g. under a tree canopy or between tall buildings)
+    /// doesn't draw a spike on the map.
+    private static let workoutRouteMaxHorizontalAccuracy: CLLocationAccuracy = 50
 
     private let motionManager = CMMotionManager()
     private let locationTracker = LocationTracker()
@@ -116,6 +128,7 @@ final class RideManager: NSObject, ObservableObject {
         locationTracker.onLocationUpdate = { [weak self] location in
             Task { @MainActor in
                 self?.maybeRecordRoutePoint(location)
+                self?.addToWorkoutRoute(location)
             }
         }
     }
@@ -126,7 +139,10 @@ final class RideManager: NSObject, ObservableObject {
         locationTracker.requestAuthorization()
 
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        let share: Set = [HKObjectType.workoutType()]
+        // workoutRoute: lets the finished workout carry its GPS track (see
+        // routeBuilder). If the user declines just this one, the workout
+        // still saves -- only without a map.
+        let share: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
         var read: Set<HKObjectType> = [HKObjectType.workoutType()]
         // All read-only here -- we never write samples ourselves, just read
         // what HealthKit collects automatically during the workout session
@@ -230,6 +246,7 @@ final class RideManager: NSObject, ObservableObject {
 
         self.session = session
         self.builder = builder
+        self.routeBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: nil)
 
         let start = Date()
         rideStartDate = start
@@ -321,6 +338,8 @@ final class RideManager: NSObject, ObservableObject {
         session?.end()
         session = nil
         builder = nil
+        routeBuilder?.discard()
+        routeBuilder = nil
     }
 
     func stopRide() {
@@ -343,12 +362,22 @@ final class RideManager: NSObject, ObservableObject {
         pauseStartDate = nil
 
         if let session, let builder {
+            let routeBuilder = self.routeBuilder
             session.end()
             builder.endCollection(withEnd: end) { [weak self] _, error in
-                builder.finishWorkout { _, _ in
-                    // We don't need the saved HKWorkout object itself -- the
-                    // Watch's Fitness app picks it up automatically. Our own
-                    // record (with bump data) is what we finalize below.
+                builder.finishWorkout { workout, _ in
+                    // The saved HKWorkout is what Fitness shows; our own
+                    // record (with bump data) is finalized separately below.
+                    // Attach the GPS track to it so the workout has a route
+                    // map. A route can only be finished against a workout
+                    // that's already saved, hence doing it here. If saving
+                    // the workout failed there's nothing to attach to, so
+                    // throw the route away instead of leaving it pending.
+                    if let workout {
+                        routeBuilder?.finishRoute(with: workout, metadata: nil) { _, _ in }
+                    } else {
+                        routeBuilder?.discard()
+                    }
                 }
                 Task { @MainActor in
                     self?.finalizeRide(endedAt: end)
@@ -356,7 +385,11 @@ final class RideManager: NSObject, ObservableObject {
             }
             self.session = nil
             self.builder = nil
+            self.routeBuilder = nil
         } else {
+            // Nothing to attach a route to without a workout.
+            routeBuilder?.discard()
+            routeBuilder = nil
             // No live HealthKit workout session to close out -- it already
             // failed and was discarded earlier in this ride. Still finalize
             // and upload the ride data we collected locally; that path never
@@ -474,6 +507,20 @@ final class RideManager: NSObject, ObservableObject {
             )
         )
         currentRide = ride
+    }
+
+    /// Every GPS fix while recording (not paused) goes into the HealthKit
+    /// workout's route -- unlike maybeRecordRoutePoint above, no 20m
+    /// thinning and no endpoint trimming: this is the user's own private
+    /// copy in Health, so it should be the full, accurate track.
+    private func addToWorkoutRoute(_ location: CLLocation) {
+        guard isRecording, !isPaused, let routeBuilder else { return }
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= Self.workoutRouteMaxHorizontalAccuracy else { return }
+        routeBuilder.insertRouteData([location]) { _, _ in
+            // A failure here (most likely: the user declined the workout
+            // route permission) just means the workout saves without a map.
+        }
     }
 
     // MARK: - Timer (UI elapsed time)

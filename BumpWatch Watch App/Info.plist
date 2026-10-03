@@ -23,7 +23,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>BumpWatch starts a cycling workout session so it can keep tracking in the background.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>BumpWatch saves your ride as a workout.</string>
+	<string>BumpWatch saves your ride as a workout, including its route map, in the Health app.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>BumpWatch records your route and where bumps happen on your ride so they can be mapped.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
